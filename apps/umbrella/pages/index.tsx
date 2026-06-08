@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
 import { COLORS, MetaLine, RelayCard } from '../src/components/RelayCard';
+import { LocationSearch } from '../src/components/LocationSearch';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
 import {
   formatTime,
@@ -19,7 +20,8 @@ import {
 
 export default function HomeScreen() {
   const navigation = useNavigation();
-  const { locations, active, activeId, setActiveId } = useLocations();
+  const { locations, active, activeId, activeAddress, setActiveId, addSearchedPlace } =
+    useLocations();
   const { report, loading, error, reload } = useRelay(active);
 
   const statusColor =
@@ -38,6 +40,12 @@ export default function HomeScreen() {
     >
       <Text style={styles.header}>우산챙겨</Text>
       <Text style={styles.subtitle}>비 언제 오고 언제 그치는지</Text>
+      <Text style={styles.address}>📍 {activeAddress}</Text>
+
+      <LocationSearch
+        placeholder="다른 지역 검색 (예: 부산, 제주, 강릉)"
+        onSelect={addSearchedPlace}
+      />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs}>
         {locations.map((loc) => (
@@ -142,7 +150,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: 20, paddingBottom: 40 },
   header: { fontSize: 28, fontWeight: '800', color: COLORS.text },
-  subtitle: { fontSize: 14, color: COLORS.sub, marginBottom: 16 },
+  subtitle: { fontSize: 14, color: COLORS.sub, marginBottom: 8 },
+  address: { fontSize: 14, color: COLORS.text, marginBottom: 12, lineHeight: 20 },
   tabs: { flexDirection: 'row', marginBottom: 16 },
   tab: {
     paddingHorizontal: 16,

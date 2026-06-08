@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
+import { LocationSearch } from '../src/components/LocationSearch';
 import { COLORS } from '../src/components/RelayCard';
 import { USER_KEY } from '../src/config';
 import { useLocations } from '../src/hooks/useLocations';
@@ -20,6 +21,7 @@ import {
   saveLocation,
   SavedLocation,
 } from '../src/services/api';
+import { GeocodePlace } from '../src/services/geocode';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
@@ -32,23 +34,31 @@ export default function SettingsScreen() {
   const [notify, setNotify] = useState(true);
   const [beforeMin, setBeforeMin] = useState<30 | 60>(30);
   const [name, setName] = useState('');
-  const [lat, setLat] = useState('37.4979');
-  const [lng, setLng] = useState('127.0276');
+  const [selectedPlace, setSelectedPlace] = useState<GeocodePlace | null>(null);
 
   useEffect(() => {
     registerUser(USER_KEY, notify);
   }, [notify]);
 
-  const saved = locations.filter((l) => l.id !== 'current');
+  const saved = locations.filter((l) => l.id !== 'current' && !l.id.startsWith('session-'));
 
   const onUseCurrentLocation = () => {
     if (!geo) {
       Alert.alert('위치 확인 중', 'GPS 신호를 받는 중입니다. 잠시 후 다시 시도해 주세요.');
       return;
     }
-    setLat(String(geo.coords.latitude));
-    setLng(String(geo.coords.longitude));
-    Alert.alert('적용됨', '현재 위치 좌표가 입력되었습니다.');
+    setSelectedPlace({
+      name: '현재 위치',
+      address: `${geo.coords.latitude.toFixed(4)}, ${geo.coords.longitude.toFixed(4)}`,
+      lat: geo.coords.latitude,
+      lng: geo.coords.longitude,
+    });
+    if (!name.trim()) setName('현재 위치');
+  };
+
+  const onSelectPlace = (place: GeocodePlace) => {
+    setSelectedPlace(place);
+    if (!name.trim()) setName(place.name);
   };
 
   const onAdd = async () => {
@@ -56,23 +66,22 @@ export default function SettingsScreen() {
       Alert.alert('이름을 입력해 주세요');
       return;
     }
-    const latN = Number(lat);
-    const lngN = Number(lng);
-    if (!Number.isFinite(latN) || !Number.isFinite(lngN)) {
-      Alert.alert('위도·경도를 확인해 주세요');
+    if (!selectedPlace) {
+      Alert.alert('지역을 검색해서 선택해 주세요');
       return;
     }
     try {
       await saveLocation(USER_KEY, {
         name: name.trim(),
-        lat: latN,
-        lng: lngN,
+        lat: selectedPlace.lat,
+        lng: selectedPlace.lng,
         notifyEnabled: notify,
         notifyBeforeMin: beforeMin,
       });
       setName('');
+      setSelectedPlace(null);
       await reload();
-      Alert.alert('저장됨', `${name} 위치가 추가되었습니다.`);
+      Alert.alert('저장됨', `${name.trim()} 위치가 추가되었습니다.`);
     } catch {
       Alert.alert('저장 실패', '최대 5곳까지 등록할 수 있습니다.');
     }
@@ -116,32 +125,27 @@ export default function SettingsScreen() {
 
       <Text style={styles.section}>즐겨찾기 추가</Text>
       <TouchableOpacity style={styles.gpsBtn} onPress={onUseCurrentLocation}>
-        <Text style={styles.gpsBtnText}>현재 위치 좌표 가져오기</Text>
+        <Text style={styles.gpsBtnText}>현재 위치로 추가</Text>
       </TouchableOpacity>
+
+      <LocationSearch placeholder="지역 검색 (예: 집 근처 동네, 회사)" onSelect={onSelectPlace} />
+
+      {selectedPlace ? (
+        <View style={styles.selectedBox}>
+          <Text style={styles.selectedLabel}>선택된 위치</Text>
+          <Text style={styles.selectedName}>{selectedPlace.name}</Text>
+          <Text style={styles.selectedAddress}>{selectedPlace.address}</Text>
+        </View>
+      ) : null}
+
       <TextInput
         style={styles.input}
-        placeholder="이름 (집, 회사…)"
+        placeholder="표시 이름 (집, 회사…)"
         value={name}
         onChangeText={setName}
       />
-      <View style={styles.coordRow}>
-        <TextInput
-          style={[styles.input, styles.coord]}
-          placeholder="위도"
-          value={lat}
-          onChangeText={setLat}
-          keyboardType="decimal-pad"
-        />
-        <TextInput
-          style={[styles.input, styles.coord]}
-          placeholder="경도"
-          value={lng}
-          onChangeText={setLng}
-          keyboardType="decimal-pad"
-        />
-      </View>
       <TouchableOpacity style={styles.addBtn} onPress={onAdd}>
-        <Text style={styles.addBtnText}>위치 추가</Text>
+        <Text style={styles.addBtnText}>위치 저장</Text>
       </TouchableOpacity>
 
       {saved.length > 0 && (
@@ -149,9 +153,9 @@ export default function SettingsScreen() {
           <Text style={styles.section}>등록된 위치</Text>
           {saved.map((loc) => (
             <View key={loc.id} style={styles.locRow}>
-              <View>
+              <View style={styles.locInfo}>
                 <Text style={styles.locName}>{loc.name}</Text>
-                <Text style={styles.locCoord}>
+                <Text style={styles.locCoord} numberOfLines={2}>
                   {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}
                 </Text>
               </View>
@@ -162,13 +166,6 @@ export default function SettingsScreen() {
           ))}
         </>
       )}
-
-      <View style={styles.info}>
-        <Text style={styles.infoText}>
-          API: {USER_KEY}{'\n'}
-          토스 출시 시 userKey·GPS·푸시(mTLS) 연동 예정
-        </Text>
-      </View>
     </ScrollView>
   );
 }
@@ -213,6 +210,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   gpsBtnText: { color: COLORS.primary, fontWeight: '700' },
+  selectedBox: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+  },
+  selectedLabel: { fontSize: 12, color: COLORS.sub, marginBottom: 4 },
+  selectedName: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  selectedAddress: { fontSize: 13, color: COLORS.sub, marginTop: 4, lineHeight: 18 },
   input: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -220,8 +226,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontSize: 16,
   },
-  coordRow: { flexDirection: 'row', gap: 10 },
-  coord: { flex: 1 },
   addBtn: {
     backgroundColor: COLORS.primary,
     padding: 14,
@@ -239,14 +243,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 8,
   },
+  locInfo: { flex: 1, paddingRight: 12 },
   locName: { fontWeight: '700', color: COLORS.text },
   locCoord: { fontSize: 12, color: COLORS.sub, marginTop: 2 },
   delete: { color: '#E53E3E', fontWeight: '600' },
-  info: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#EEF4FB',
-    borderRadius: 12,
-  },
-  infoText: { fontSize: 13, color: COLORS.sub, lineHeight: 20 },
 });

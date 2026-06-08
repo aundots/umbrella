@@ -8,6 +8,7 @@ import {
   registerUser,
   SavedLocation,
 } from '../services/api';
+import { GeocodePlace, reverseGeocode } from '../services/geocode';
 
 const FALLBACK_CURRENT: SavedLocation = {
   id: 'current',
@@ -18,6 +19,23 @@ const FALLBACK_CURRENT: SavedLocation = {
   notifyEnabled: true,
   notifyBeforeMin: 30,
 };
+
+function sessionId(lat: number, lng: number): string {
+  return `session-${lat.toFixed(4)}-${lng.toFixed(4)}`;
+}
+
+function placeToSessionLocation(place: GeocodePlace): SavedLocation {
+  return {
+    id: sessionId(place.lat, place.lng),
+    userKey: USER_KEY,
+    name: place.name,
+    address: place.address,
+    lat: place.lat,
+    lng: place.lng,
+    notifyEnabled: false,
+    notifyBeforeMin: 30,
+  };
+}
 
 export function useCurrentCoords() {
   const geo = useGeolocation({
@@ -39,18 +57,24 @@ export function useCurrentCoords() {
 export function useLocations() {
   const coords = useCurrentCoords();
   const [saved, setSaved] = useState<SavedLocation[]>([]);
+  const [sessionPlaces, setSessionPlaces] = useState<SavedLocation[]>([]);
   const [activeId, setActiveId] = useState('current');
+  const [currentAddress, setCurrentAddress] = useState<string | null>(null);
 
   const current = useMemo<SavedLocation>(
     () => ({
       ...FALLBACK_CURRENT,
       lat: coords.lat,
       lng: coords.lng,
+      address: currentAddress ?? undefined,
     }),
-    [coords.lat, coords.lng],
+    [coords.lat, coords.lng, currentAddress],
   );
 
-  const locations = useMemo(() => [current, ...saved], [current, saved]);
+  const locations = useMemo(
+    () => [current, ...saved, ...sessionPlaces],
+    [current, saved, sessionPlaces],
+  );
 
   const reload = useCallback(async () => {
     try {
@@ -66,9 +90,47 @@ export function useLocations() {
     reload();
   }, [reload]);
 
+  useEffect(() => {
+    let cancelled = false;
+    reverseGeocode(coords.lat, coords.lng)
+      .then((place) => {
+        if (!cancelled) setCurrentAddress(place.address);
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentAddress(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [coords.lat, coords.lng]);
+
+  const addSearchedPlace = useCallback((place: GeocodePlace) => {
+    const loc = placeToSessionLocation(place);
+    setSessionPlaces((prev) => {
+      const filtered = prev.filter((item) => item.id !== loc.id);
+      return [loc, ...filtered].slice(0, 8);
+    });
+    setActiveId(loc.id);
+  }, []);
+
   const active = locations.find((l) => l.id === activeId) ?? current;
 
-  return { locations, active, activeId, setActiveId, reload, coords };
+  const activeAddress =
+    active.id === 'current'
+      ? currentAddress ?? '위치 확인 중…'
+      : active.address ?? `${active.lat.toFixed(4)}, ${active.lng.toFixed(4)}`;
+
+  return {
+    locations,
+    active,
+    activeId,
+    activeAddress,
+    currentAddress,
+    setActiveId,
+    addSearchedPlace,
+    reload,
+    coords,
+  };
 }
 
 export function useRelay(active: SavedLocation) {

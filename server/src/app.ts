@@ -10,11 +10,13 @@ import {
 import { buildLiveRelayReport } from './engine/liveRelay.js';
 import { getCached, setCache } from './kma/cache.js';
 import { registerLegalRoutes } from './routes/legal.js';
+import { registerGeocodeRoutes } from './routes/geocode.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
   await app.register(cors, { origin: true });
   registerLegalRoutes(app);
+  registerGeocodeRoutes(app);
 
   app.get('/health', async () => ({ ok: true, service: 'umbrella-server' }));
 

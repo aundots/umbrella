@@ -46,6 +46,7 @@ export interface SavedLocation {
   name: string;
   lat: number;
   lng: number;
+  address?: string;
   notifyEnabled: boolean;
   notifyBeforeMin: 30 | 60;
 }
