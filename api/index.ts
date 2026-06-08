@@ -1,6 +1,5 @@
-import 'dotenv/config';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { buildApp } from '../server/dist/app.js';
+import { buildApp } from '../server/src/app.js';
 
 type FastifyApp = Awaited<ReturnType<typeof buildApp>>;
 

@@ -2,11 +2,16 @@
   "name": "umbrella",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "우산챙겨 — 앱인토스 강수 실시간 중계",
   "scripts": {
     "dev:server": "npm run dev --prefix server",
     "dev:app": "npm run dev --prefix apps/umbrella",
     "build:server": "npm run build --prefix server",
     "typecheck:server": "npm run typecheck --prefix server"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "fastify": "^5.2.1"
   }
 }

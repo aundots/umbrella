@@ -3,7 +3,19 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import type { FastifyInstance } from 'fastify';
 
-const LEGAL_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../public/legal');
+function resolveLegalDir(): string {
+  const candidates = [
+    join(process.cwd(), 'server/public/legal'),
+    join(process.cwd(), 'public/legal'),
+    join(dirname(fileURLToPath(import.meta.url)), '../../public/legal'),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'terms.html'))) return dir;
+  }
+  return candidates[0];
+}
+
+const LEGAL_DIR = resolveLegalDir();
 
 function readLegalPage(filename: string): string | null {
   const path = join(LEGAL_DIR, filename);

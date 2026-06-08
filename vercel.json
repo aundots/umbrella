@@ -1,15 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "name": "umbrella",
-  "installCommand": "npm install --prefix server",
+  "installCommand": "npm install && npm install --prefix server",
   "buildCommand": "npm run build --prefix server",
+  "outputDirectory": ".",
   "rewrites": [
     { "source": "/(.*)", "destination": "/api" }
   ],
   "functions": {
     "api/index.ts": {
-      "memory": 1024,
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "server/public/**"
     }
   }
 }
