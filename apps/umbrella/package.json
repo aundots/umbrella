@@ -1,0 +1,27 @@
+{
+  "name": "umbrella",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "granite dev",
+    "build": "ait build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@apps-in-toss/framework": "2.4.1",
+    "@granite-js/native": "1.0.4",
+    "@granite-js/react-native": "1.0.4",
+    "@toss/tds-react-native": "2.0.2",
+    "react": "19.2.3",
+    "react-native": "0.84.0"
+  },
+  "devDependencies": {
+    "@babel/core": "7.23.9",
+    "@granite-js/plugin-hermes": "1.0.4",
+    "@granite-js/plugin-router": "1.0.4",
+    "@types/react": "19.2.3",
+    "babel-preset-granite": "1.0.3",
+    "typescript": "^5.7.3"
+  }
+}

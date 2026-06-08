@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+server/data/
+*.ait
+.DS_Store
+.vercel
+*.log
