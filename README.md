@@ -32,10 +32,10 @@ npm run dev
 cd apps/umbrella
 npm install
 npm run dev      # 토스 샌드박스 연결
-npm run build    # umbrella.ait 생성 (Linux/macOS 권장)
+npm run build    # umbrella.ait 생성 (Windows 포함, prebuild 패치 자동 적용)
 ```
 
-> **Windows 참고:** `ait build`는 경로 이스케이프 이슈로 Windows에서 실패할 수 있습니다. GitHub Actions(`Build umbrella.ait` 워크플로)로 빌드하거나 Linux/WSL에서 실행하세요.
+> **Windows:** `npm run build` 실행 시 granite 경로 패치(`scripts/patch-granite-windows.mjs`)가 자동 적용됩니다. 산출물: `apps/umbrella/umbrella.ait`
 
 앱인토ss 패키지는 토스 npm 레지스트리 로그인이 필요할 수 있습니다.
 
