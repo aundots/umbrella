@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
-import { preloadInterstitial } from '../src/ads/interstitial';
 import { COLORS, MetaLine, RelayCard } from '../src/components/RelayCard';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
 import {
@@ -22,10 +21,6 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const { locations, active, activeId, setActiveId } = useLocations();
   const { report, loading, error, reload } = useRelay(active);
-
-  useEffect(() => {
-    preloadInterstitial();
-  }, []);
 
   const statusColor =
     report?.relayStatus === 'live'
@@ -61,9 +56,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {loading && !report ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
-      ) : error ? (
+      {error ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
           <Text style={styles.errorHint}>
@@ -73,61 +66,72 @@ export default function HomeScreen() {
             <Text style={styles.retry}>다시 시도</Text>
           </TouchableOpacity>
         </View>
-      ) : report ? (
+      ) : (
         <>
-          <RelayCard title="● 지금" accent={statusColor}>
-            <Text style={styles.main}>{statusLabel(report.relayStatus)}</Text>
-            {report.now.precipitating ? (
-              <Text style={styles.value}>
-                {precipLabel(report.now.type)} · 시간당 {report.now.rateMmH} mm
-              </Text>
-            ) : (
-              <Text style={styles.value}>강수 없음</Text>
-            )}
-            <MetaLine text={`${formatTime(report.observedAt)} 관측 · 500m 구역 기준`} />
-          </RelayCard>
-
-          <RelayCard title="→ 도달" accent={COLORS.approaching}>
-            {report.now.precipitating ? (
-              <Text style={styles.value}>— (이미 내리는 중)</Text>
-            ) : report.arrival.willArrive && report.arrival.inMinutes != null ? (
-              <>
-                <Text style={styles.main}>
-                  {report.arrival.inMinutes}분 후 {precipLabel(report.arrival.type)} 도달
-                </Text>
-                <Text style={styles.value}>최대 시간당 {report.arrival.peakRateMmH} mm</Text>
-              </>
-            ) : (
-              <Text style={styles.value}>1시간 내 도달 없음</Text>
-            )}
-          </RelayCard>
-
-          <RelayCard title="↓ 종료" accent={COLORS.primary}>
-            {report.end.at ? (
-              <>
-                <Text style={styles.main}>약 {formatTime(report.end.at)}</Text>
-                {report.end.remainingMinutes != null && (
-                  <Text style={styles.value}>({report.end.remainingMinutes}분 후)</Text>
+          {loading && !report ? (
+            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 24, marginBottom: 8 }} />
+          ) : null}
+          {report ? (
+            <>
+              <RelayCard title="● 지금" accent={statusColor}>
+                <Text style={styles.main}>{statusLabel(report.relayStatus)}</Text>
+                {report.now.precipitating ? (
+                  <Text style={styles.value}>
+                    {precipLabel(report.now.type)} · 시간당 {report.now.rateMmH} mm
+                  </Text>
+                ) : (
+                  <Text style={styles.value}>강수 없음</Text>
                 )}
-              </>
-            ) : (
-              <Text style={styles.value}>—</Text>
-            )}
-          </RelayCard>
+                <MetaLine text={`${formatTime(report.observedAt)} 관측 · 500m 구역 기준`} />
+              </RelayCard>
 
-          <View style={styles.footer}>
-            <MetaLine text={`신뢰도 ${report.confidence}%`} />
-            {report.terrain?.note ? <MetaLine text={`지형: ${report.terrain.note}`} /> : null}
-          </View>
+              <RelayCard title="→ 도달" accent={COLORS.approaching}>
+                {report.now.precipitating ? (
+                  <Text style={styles.value}>— (이미 내리는 중)</Text>
+                ) : report.arrival.willArrive && report.arrival.inMinutes != null ? (
+                  <>
+                    <Text style={styles.main}>
+                      {report.arrival.inMinutes}분 후 {precipLabel(report.arrival.type)} 도달
+                    </Text>
+                    <Text style={styles.value}>최대 시간당 {report.arrival.peakRateMmH} mm</Text>
+                  </>
+                ) : (
+                  <Text style={styles.value}>1시간 내 도달 없음</Text>
+                )}
+              </RelayCard>
 
-          <TouchableOpacity
-            style={styles.linkBtn}
-            onPress={() => navigation.navigate('/timeline')}
-          >
-            <Text style={styles.linkText}>시간별 중계표 보기 →</Text>
-          </TouchableOpacity>
+              <RelayCard title="↓ 종료" accent={COLORS.primary}>
+                {report.end.at ? (
+                  <>
+                    <Text style={styles.main}>약 {formatTime(report.end.at)}</Text>
+                    {report.end.remainingMinutes != null && (
+                      <Text style={styles.value}>({report.end.remainingMinutes}분 후)</Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={styles.value}>—</Text>
+                )}
+              </RelayCard>
+
+              <View style={styles.footer}>
+                <MetaLine text={`신뢰도 ${report.confidence}%`} />
+                {report.terrain?.note ? <MetaLine text={`지형: ${report.terrain.note}`} /> : null}
+              </View>
+
+              <TouchableOpacity
+                style={styles.linkBtn}
+                onPress={() => navigation.navigate('/timeline')}
+              >
+                <Text style={styles.linkText}>시간별 중계표 보기 →</Text>
+              </TouchableOpacity>
+            </>
+          ) : !loading ? (
+            <RelayCard title="● 지금" accent={COLORS.primary}>
+              <Text style={styles.value}>아직 표시할 중계 정보가 없어요.</Text>
+            </RelayCard>
+          ) : null}
         </>
-      ) : null}
+      )}
       </ScrollView>
     </View>
   );

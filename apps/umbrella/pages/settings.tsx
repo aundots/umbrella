@@ -11,7 +11,6 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
-import { showInterstitial } from '../src/ads/interstitial';
 import { COLORS } from '../src/components/RelayCard';
 import { USER_KEY } from '../src/config';
 import { useLocations } from '../src/hooks/useLocations';
@@ -85,7 +84,7 @@ export default function SettingsScreen() {
   };
 
   const goBack = () => {
-    showInterstitial(() => navigation.navigate('/'));
+    navigation.navigate('/');
   };
 
   return (

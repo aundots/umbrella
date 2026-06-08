@@ -73,11 +73,11 @@ export function useLocations() {
 
 export function useRelay(active: SavedLocation) {
   const [report, setReport] = useState<LiveRelayReport | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (withSpinner = false) => {
+    if (withSpinner) setLoading(true);
     setError(null);
     try {
       const data = await fetchRelay(active.lat, active.lng, active.name);
@@ -90,10 +90,10 @@ export function useRelay(active: SavedLocation) {
   }, [active.lat, active.lng, active.name]);
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 5 * 60 * 1000);
+    load(false);
+    const t = setInterval(() => load(false), 5 * 60 * 1000);
     return () => clearInterval(t);
   }, [load]);
 
-  return { report, loading, error, reload: load };
+  return { report, loading, error, reload: () => load(true) };
 }
