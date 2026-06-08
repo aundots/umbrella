@@ -1,3 +1,4 @@
+import { Accuracy, useGeolocation } from '@apps-in-toss/framework';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -24,6 +25,11 @@ import {
 export default function SettingsScreen() {
   const navigation = useNavigation();
   const { locations, reload } = useLocations();
+  const geo = useGeolocation({
+    accuracy: Accuracy.Balanced,
+    timeInterval: 30_000,
+    distanceInterval: 50,
+  });
   const [notify, setNotify] = useState(true);
   const [beforeMin, setBeforeMin] = useState<30 | 60>(30);
   const [name, setName] = useState('');
@@ -35,6 +41,16 @@ export default function SettingsScreen() {
   }, [notify]);
 
   const saved = locations.filter((l) => l.id !== 'current');
+
+  const onUseCurrentLocation = () => {
+    if (!geo) {
+      Alert.alert('위치 확인 중', 'GPS 신호를 받는 중입니다. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+    setLat(String(geo.coords.latitude));
+    setLng(String(geo.coords.longitude));
+    Alert.alert('적용됨', '현재 위치 좌표가 입력되었습니다.');
+  };
 
   const onAdd = async () => {
     if (!name.trim()) {
@@ -100,6 +116,9 @@ export default function SettingsScreen() {
       </View>
 
       <Text style={styles.section}>즐겨찾기 추가</Text>
+      <TouchableOpacity style={styles.gpsBtn} onPress={onUseCurrentLocation}>
+        <Text style={styles.gpsBtnText}>현재 위치 좌표 가져오기</Text>
+      </TouchableOpacity>
       <TextInput
         style={styles.input}
         placeholder="이름 (집, 회사…)"
@@ -187,6 +206,14 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: COLORS.primary },
   chipText: { color: COLORS.sub, fontWeight: '600' },
   chipTextActive: { color: '#fff' },
+  gpsBtn: {
+    backgroundColor: '#EEF4FB',
+    padding: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  gpsBtnText: { color: COLORS.primary, fontWeight: '700' },
   input: {
     backgroundColor: '#fff',
     borderRadius: 10,

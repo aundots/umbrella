@@ -7,14 +7,11 @@ let loaded = false;
 export function preloadInterstitial(): void {
   try {
     loadFullScreenAd({
-      adGroupId: TEST_AD_GROUP_ID,
+      options: { adGroupId: TEST_AD_GROUP_ID },
       onEvent: (event) => {
         if (event.type === 'loaded') loaded = true;
-        if (event.type === 'dismissed') {
-          loaded = false;
-          preloadInterstitial();
-        }
       },
+      onError: () => {},
     });
   } catch {
     // 샌드박스/미지원 환경
@@ -28,12 +25,15 @@ export function showInterstitial(onDone?: () => void): void {
       return;
     }
     showFullScreenAd({
-      adGroupId: TEST_AD_GROUP_ID,
+      options: { adGroupId: TEST_AD_GROUP_ID },
       onEvent: (event) => {
         if (event.type === 'dismissed' || event.type === 'failedToShow') {
+          loaded = false;
+          preloadInterstitial();
           onDone?.();
         }
       },
+      onError: () => onDone?.(),
     });
   } catch {
     onDone?.();

@@ -67,7 +67,7 @@ export default function HomeScreen() {
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
           <Text style={styles.errorHint}>
-            server 폴더에서 npm run dev 실행 · src/config.ts API 주소 확인
+            네트워크 연결을 확인한 뒤 다시 시도해 주세요.
           </Text>
           <TouchableOpacity onPress={reload}>
             <Text style={styles.retry}>다시 시도</Text>

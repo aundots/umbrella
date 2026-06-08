@@ -9,10 +9,9 @@ export default defineConfig({
       brand: {
         displayName: '우산챙겨',
         primaryColor: '#5B9BD5',
-        icon: '',
-        bridgeColorMode: 'basic',
+        icon: 'assets/logo.png',
       },
-      permissions: [],
+      permissions: [{ name: 'geolocation', access: 'access' }],
     }),
   ],
 });

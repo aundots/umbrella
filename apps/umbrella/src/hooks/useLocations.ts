@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Accuracy, useGeolocation } from '@apps-in-toss/framework';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { USER_KEY } from '../config';
 import {
   fetchLocations,
@@ -8,7 +9,7 @@ import {
   SavedLocation,
 } from '../services/api';
 
-const DEFAULT_CURRENT: SavedLocation = {
+const FALLBACK_CURRENT: SavedLocation = {
   id: 'current',
   userKey: USER_KEY,
   name: '현재',
@@ -18,17 +19,46 @@ const DEFAULT_CURRENT: SavedLocation = {
   notifyBeforeMin: 30,
 };
 
+export function useCurrentCoords() {
+  const geo = useGeolocation({
+    accuracy: Accuracy.Balanced,
+    timeInterval: 60_000,
+    distanceInterval: 200,
+  });
+
+  return useMemo(
+    () => ({
+      lat: geo?.coords.latitude ?? FALLBACK_CURRENT.lat,
+      lng: geo?.coords.longitude ?? FALLBACK_CURRENT.lng,
+      ready: geo != null,
+    }),
+    [geo?.coords.latitude, geo?.coords.longitude, geo],
+  );
+}
+
 export function useLocations() {
-  const [locations, setLocations] = useState<SavedLocation[]>([DEFAULT_CURRENT]);
+  const coords = useCurrentCoords();
+  const [saved, setSaved] = useState<SavedLocation[]>([]);
   const [activeId, setActiveId] = useState('current');
+
+  const current = useMemo<SavedLocation>(
+    () => ({
+      ...FALLBACK_CURRENT,
+      lat: coords.lat,
+      lng: coords.lng,
+    }),
+    [coords.lat, coords.lng],
+  );
+
+  const locations = useMemo(() => [current, ...saved], [current, saved]);
 
   const reload = useCallback(async () => {
     try {
       await registerUser(USER_KEY, true);
-      const saved = await fetchLocations(USER_KEY);
-      setLocations([DEFAULT_CURRENT, ...saved]);
+      const list = await fetchLocations(USER_KEY);
+      setSaved(list);
     } catch {
-      setLocations([DEFAULT_CURRENT]);
+      setSaved([]);
     }
   }, []);
 
@@ -36,10 +66,9 @@ export function useLocations() {
     reload();
   }, [reload]);
 
-  const active =
-    locations.find((l) => l.id === activeId) ?? DEFAULT_CURRENT;
+  const active = locations.find((l) => l.id === activeId) ?? current;
 
-  return { locations, active, activeId, setActiveId, reload };
+  return { locations, active, activeId, setActiveId, reload, coords };
 }
 
 export function useRelay(active: SavedLocation) {

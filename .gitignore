@@ -6,3 +6,4 @@ server/data/
 .DS_Store
 .vercel
 *.log
+apps/umbrella/.granite/
