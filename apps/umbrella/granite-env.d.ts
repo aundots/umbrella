@@ -1,3 +1,5 @@
+export {};
+
 interface RequireContext {
   keys(): string[];
   resolve(id: string): string;
@@ -5,6 +7,8 @@ interface RequireContext {
   (id: string): unknown;
 }
 
-interface NodeRequire {
-  context(path: string, deep?: boolean, filter?: RegExp): RequireContext;
+declare global {
+  interface NodeRequire {
+    context(path: string, deep?: boolean, filter?: RegExp): RequireContext;
+  }
 }

@@ -11,5 +11,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["pages/**/*", "src/**/*", "granite.config.ts", "require.context.ts", "granite-env.d.ts"]
+  "include": ["pages/**/*", "src/**/*", "index.ts", "granite.config.ts", "require.context.ts", "granite-env.d.ts"]
 }

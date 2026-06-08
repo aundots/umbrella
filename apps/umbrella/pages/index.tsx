@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
-import { preloadInterstitial, showInterstitial } from '../src/ads/interstitial';
+import { preloadInterstitial } from '../src/ads/interstitial';
 import { COLORS, MetaLine, RelayCard } from '../src/components/RelayCard';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
 import {
@@ -25,7 +25,6 @@ export default function HomeScreen() {
 
   useEffect(() => {
     preloadInterstitial();
-    showInterstitial();
   }, []);
 
   const statusColor =
@@ -36,7 +35,8 @@ export default function HomeScreen() {
         : COLORS.clear;
 
   return (
-    <ScrollView
+    <View style={styles.root}>
+      <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
@@ -128,11 +128,13 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: COLORS.bg },
   container: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: 20, paddingBottom: 40 },
   header: { fontSize: 28, fontWeight: '800', color: COLORS.text },
