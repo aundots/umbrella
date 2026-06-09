@@ -1,0 +1,24 @@
+name: Rain notify cron
+
+on:
+  schedule:
+    # every 5 minutes (GitHub Actions — Vercel Hobby allows daily cron only)
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger /cron/notify
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          API_BASE: https://umbrella-three-iota.vercel.app
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET repository secret is not set"
+            exit 1
+          fi
+          curl -fsS \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${API_BASE}/cron/notify"
