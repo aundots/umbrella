@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { COLORS } from './RelayCard';
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ListRow, SearchField, Txt } from '@toss/tds-react-native';
+import { COLORS, RADIUS } from '../theme';
 import { GeocodePlace, searchPlaces } from '../services/geocode';
 
 interface Props {
@@ -15,7 +9,10 @@ interface Props {
   onSelect: (place: GeocodePlace) => void;
 }
 
-export function LocationSearch({ placeholder = '지역명 검색 (예: 강남역, 해운대)', onSelect }: Props) {
+export function LocationSearch({
+  placeholder = '지역명 검색 (예: 강남역, 해운대)',
+  onSelect,
+}: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeocodePlace[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,54 +46,61 @@ export function LocationSearch({ placeholder = '지역명 검색 (예: 강남역
 
   return (
     <View style={styles.wrap}>
-      <TextInput
-        style={styles.input}
+      <SearchField
         placeholder={placeholder}
-        placeholderTextColor={COLORS.sub}
         value={query}
         onChangeText={setQuery}
-        returnKeyType="search"
+        hasClearButton
+        style={styles.search}
       />
       {loading ? <ActivityIndicator color={COLORS.primary} style={styles.loader} /> : null}
-      {error && !loading ? <Text style={styles.error}>{error}</Text> : null}
-      {results.map((place) => (
-        <TouchableOpacity
-          key={`${place.lat}-${place.lng}-${place.address}`}
-          style={styles.result}
-          onPress={() => {
-            onSelect(place);
-            setQuery('');
-            setResults([]);
-          }}
-        >
-          <Text style={styles.resultName}>{place.name}</Text>
-          <Text style={styles.resultAddress} numberOfLines={2}>
-            {place.address}
-          </Text>
-        </TouchableOpacity>
-      ))}
+      {error && !loading ? (
+        <Txt typography="t7" color={COLORS.sub} style={styles.error}>
+          {error}
+        </Txt>
+      ) : null}
+      {results.length > 0 ? (
+        <View style={styles.results}>
+          {results.map((place) => (
+            <TouchableOpacity
+              key={`${place.lat}-${place.lng}-${place.address}`}
+              activeOpacity={0.7}
+              onPress={() => {
+                onSelect(place);
+                setQuery('');
+                setResults([]);
+              }}
+            >
+              <ListRow
+                contents={
+                  <ListRow.Texts
+                    type="2RowTypeA"
+                    top={place.name}
+                    bottom={place.address}
+                  />
+                }
+                verticalPadding="small"
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 12 },
-  input: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: COLORS.text,
+  search: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.sm,
   },
-  loader: { marginTop: 10 },
-  error: { color: COLORS.sub, fontSize: 13, marginTop: 8 },
-  result: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 12,
+  loader: { marginTop: 12 },
+  error: { marginTop: 8 },
+  results: {
     marginTop: 8,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
   },
-  resultName: { fontSize: 15, fontWeight: '700', color: COLORS.text },
-  resultAddress: { fontSize: 13, color: COLORS.sub, marginTop: 4 },
 });

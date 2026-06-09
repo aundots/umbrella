@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { getCached, setCache } from '../kma/cache.js';
-import { reverseGeocode, searchPlaces, type GeocodePlace } from '../geocode/nominatim.js';
+import { reverseGeocode } from '../geocode/nominatim.js';
+import { searchPlaces } from '../geocode/search.js';
+import type { GeocodePlace } from '../geocode/types.js';
 
 export function registerGeocodeRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { lat: string; lng: string } }>(

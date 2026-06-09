@@ -7,6 +7,7 @@ export interface MapleForecastSlot {
 }
 
 const LEAD_MINUTES = [10, 20, 30, 40, 50, 60];
+const MAX_BASE_TIME_ATTEMPTS = 2;
 
 export async function fetchMapleAtLocation(
   lat: number,
@@ -16,24 +17,21 @@ export async function fetchMapleAtLocation(
     return { baseTime: null, slots: [] };
   }
 
-  for (const baseTime of candidateRadarDateTimes()) {
-    const slots: MapleForecastSlot[] = [];
-
-    for (const leadMin of LEAD_MINUTES) {
-      try {
-        const grid = await fetchMapleQpfGrid(baseTime, leadMin);
-        if (!grid) continue;
-        const rate = rainRateAtGrid(grid, lat, lng);
-        if (rate != null && rate > 0) {
-          slots.push({ offsetMin: leadMin, rateMmH: rate });
-        } else if (rate === 0) {
-          slots.push({ offsetMin: leadMin, rateMmH: 0 });
+  for (const baseTime of candidateRadarDateTimes().slice(0, MAX_BASE_TIME_ATTEMPTS)) {
+    const leadResults = await Promise.all(
+      LEAD_MINUTES.map(async (leadMin) => {
+        try {
+          const grid = await fetchMapleQpfGrid(baseTime, leadMin);
+          if (!grid) return null;
+          const rate = rainRateAtGrid(grid, lat, lng);
+          return { offsetMin: leadMin, rateMmH: rate ?? 0 };
+        } catch {
+          return null;
         }
-      } catch {
-        continue;
-      }
-    }
+      }),
+    );
 
+    const slots = leadResults.filter((slot): slot is MapleForecastSlot => slot != null);
     if (slots.length > 0) {
       return { baseTime, slots };
     }

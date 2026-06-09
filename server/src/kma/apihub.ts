@@ -1,4 +1,6 @@
+import { fetchWithTimeout } from './fetchUtil.js';
 import { latLngToRadarGrid, parseGridValues, sampleGridAt } from './radarGrid.js';
+import { getCached, setCache } from './cache.js';
 import type { RadarGridField } from './wthrRadar.js';
 
 const TYPO2 = 'https://apihub.kma.go.kr/api/typ02/openApi/WthrRadarInfoService';
@@ -30,7 +32,7 @@ async function fetchApihubGrid(
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithTimeout(url, undefined, 6_000);
   if (!res.ok) throw new Error(`APIHub HTTP ${res.status}`);
   const json = (await res.json()) as {
     response?: {
@@ -69,24 +71,28 @@ export async function fetchMapleQpfGrid(
   dateTime: string,
   leadMin: number,
 ): Promise<RadarGridField | null> {
-  const paths = ['getCompQpfCappiQcdAll', 'getCompCappiQpfAll', 'getQpfCappiQcdAll'];
-  const paramSets: Record<string, string>[] = [
-    { compType: 'HSP', dataTypeCd: 'RN', ef: String(leadMin) },
-    { compType: 'HSP', dataTypeCd: 'RN', fcstTime: String(leadMin) },
-    { compType: 'HSP', dataTypeCd: 'RN', lead: String(leadMin) },
+  const cacheKey = `maple:grid:${dateTime}:${leadMin}`;
+  const cached = getCached<RadarGridField>(cacheKey);
+  if (cached) return cached;
+
+  const attempts: Array<[string, Record<string, string>]> = [
+    ['getCompQpfCappiQcdAll', { compType: 'HSP', dataTypeCd: 'RN', ef: String(leadMin) }],
+    ['getCompCappiQpfAll', { compType: 'HSP', dataTypeCd: 'RN', fcstTime: String(leadMin) }],
   ];
 
-  for (const path of paths) {
-    for (const params of paramSets) {
+  const grids = await Promise.all(
+    attempts.map(async ([path, params]) => {
       try {
-        const grid = await fetchApihubGrid(path, dateTime, params);
-        if (grid?.values.length) return grid;
+        return await fetchApihubGrid(path, dateTime, params);
       } catch {
-        continue;
+        return null;
       }
-    }
-  }
-  return null;
+    }),
+  );
+
+  const grid = grids.find((candidate) => candidate != null && candidate.values.length > 0) ?? null;
+  if (grid) setCache(cacheKey, grid);
+  return grid;
 }
 
 export function rainRateAtGrid(

@@ -1,5 +1,5 @@
 import { Accuracy, useGeolocation } from '@apps-in-toss/framework';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -53,6 +53,7 @@ export default function SettingsScreen() {
   const [editName, setEditName] = useState('');
   const [editPlace, setEditPlace] = useState<GeocodePlace | null>(null);
   const [saving, setSaving] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
 
   const previewCoords = useMemo(() => {
     if (selectedPlace) return { lat: selectedPlace.lat, lng: selectedPlace.lng };
@@ -155,6 +156,7 @@ export default function SettingsScreen() {
     setGeoLoading(true);
     try {
       const place = await reverseGeocode(geo.coords.latitude, geo.coords.longitude);
+      cancelEdit();
       setSelectedPlace({
         name: place.address,
         address: place.address,
@@ -162,6 +164,7 @@ export default function SettingsScreen() {
         lng: geo.coords.longitude,
       });
       setName('');
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     } catch {
       Alert.alert('주소 확인 실패', '잠시 후 다시 시도해 주세요.');
     } finally {
@@ -170,8 +173,10 @@ export default function SettingsScreen() {
   };
 
   const onSelectPlace = (place: GeocodePlace) => {
+    cancelEdit();
     setSelectedPlace(place);
     setName('');
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
   const onAdd = async () => {
@@ -212,6 +217,7 @@ export default function SettingsScreen() {
   };
 
   const startEdit = (loc: SavedLocation) => {
+    clearAddForm();
     setEditingId(loc.id);
     setEditName(loc.name);
     setEditPlace({
@@ -299,7 +305,11 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      ref={scrollRef}
+      style={styles.container}
+      contentContainerStyle={styles.content}
+    >
       <TouchableOpacity onPress={goBack}>
         <Text style={styles.back}>← 돌아가기</Text>
       </TouchableOpacity>
@@ -348,62 +358,74 @@ export default function SettingsScreen() {
       </View>
 
       <Text style={styles.section}>즐겨찾기 추가</Text>
-      <Text style={styles.sectionHint}>지역을 선택한 뒤 저장할 이름을 정해 주세요</Text>
+      <Text style={styles.sectionHint}>주소를 검색해 선택한 뒤, 저장할 이름을 입력하세요</Text>
 
-      {!selectedPlace ? (
-        <>
-          <TouchableOpacity
-            style={[styles.gpsBtn, geoLoading && styles.gpsBtnDisabled]}
-            onPress={onUseCurrentLocation}
-            disabled={geoLoading}
-          >
-            {geoLoading ? (
-              <ActivityIndicator color={COLORS.primary} />
-            ) : (
-              <Text style={styles.gpsBtnText}>현재 위치로 추가</Text>
-            )}
-          </TouchableOpacity>
-          <LocationSearch placeholder="지역 검색 (예: 강남역, 해운대)" onSelect={onSelectPlace} />
-        </>
-      ) : (
-        <View style={styles.savePanel}>
-          <Text style={styles.selectedLabel}>선택된 위치</Text>
-          <Text style={styles.selectedAddress}>{selectedPlace.address}</Text>
+      <View style={styles.savePanel}>
+        <Text style={styles.nameLabel}>주소 검색</Text>
+        <LocationSearch placeholder="지역 검색 (예: 강남역, 해운대)" onSelect={onSelectPlace} />
 
-          <Text style={styles.nameLabel}>저장할 이름</Text>
-          <View style={styles.presetRow}>
-            {NAME_PRESETS.map((preset) => (
-              <TouchableOpacity
-                key={preset}
-                style={[styles.presetChip, name === preset && styles.presetChipActive]}
-                onPress={() => setName(preset)}
-              >
-                <Text style={[styles.presetText, name === preset && styles.presetTextActive]}>
-                  {preset}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TextInput
-            style={styles.input}
-            placeholder="예: 학교, 할머니 댁"
-            value={name}
-            onChangeText={setName}
-            autoFocus
-          />
-
-          <TouchableOpacity
-            style={[styles.addBtn, saving && styles.btnDisabled]}
-            onPress={onAdd}
-            disabled={saving}
-          >
-            <Text style={styles.addBtnText}>{saving ? '저장 중…' : '위치 저장'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelBtn} onPress={clearAddForm}>
-            <Text style={styles.cancelBtnText}>다시 검색</Text>
-          </TouchableOpacity>
+        <View style={styles.orRow}>
+          <View style={styles.orLine} />
+          <Text style={styles.orText}>또는</Text>
+          <View style={styles.orLine} />
         </View>
-      )}
+
+        <TouchableOpacity
+          style={[styles.gpsBtn, geoLoading && styles.gpsBtnDisabled]}
+          onPress={onUseCurrentLocation}
+          disabled={geoLoading}
+        >
+          {geoLoading ? (
+            <ActivityIndicator color={COLORS.primary} />
+          ) : (
+            <Text style={styles.gpsBtnText}>현재 위치 사용</Text>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.panelDivider} />
+
+        <Text style={styles.selectedLabel}>선택된 주소</Text>
+        <Text style={[styles.selectedAddress, !selectedPlace && styles.selectedPlaceholder]}>
+          {selectedPlace?.address ?? '검색 결과를 선택하면 주소가 표시됩니다'}
+        </Text>
+
+        <Text style={styles.nameLabel}>저장할 이름</Text>
+        <View style={styles.presetRow}>
+          {NAME_PRESETS.map((preset) => (
+            <TouchableOpacity
+              key={preset}
+              style={[styles.presetChip, name === preset && styles.presetChipActive]}
+              onPress={() => setName(preset)}
+            >
+              <Text style={[styles.presetText, name === preset && styles.presetTextActive]}>
+                {preset}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="예: 학교, 할머니 댁"
+          value={name}
+          onChangeText={setName}
+        />
+
+        <TouchableOpacity
+          style={[
+            styles.addBtn,
+            (!selectedPlace || !name.trim() || saving) && styles.btnDisabled,
+          ]}
+          onPress={onAdd}
+          disabled={!selectedPlace || !name.trim() || saving}
+        >
+          <Text style={styles.addBtnText}>{saving ? '저장 중…' : '위치 저장'}</Text>
+        </TouchableOpacity>
+        {selectedPlace ? (
+          <TouchableOpacity style={styles.cancelBtn} onPress={clearAddForm}>
+            <Text style={styles.cancelBtnText}>선택 취소</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
 
       {saved.length > 0 && (
         <>
@@ -440,14 +462,14 @@ export default function SettingsScreen() {
                     onChangeText={setEditName}
                   />
 
-                  <Text style={styles.nameLabel}>주소 변경</Text>
-                  <Text style={styles.editCurrentAddress}>
-                    {editPlace.address || '주소 확인 중…'}
-                  </Text>
+                  <Text style={styles.nameLabel}>주소 검색으로 변경</Text>
                   <LocationSearch
-                    placeholder="새 주소 검색"
+                    placeholder="새 주소 검색 (예: 부산 해운대)"
                     onSelect={(place) => setEditPlace(place)}
                   />
+                  <Text style={styles.editCurrentAddress}>
+                    선택된 주소: {editPlace.address || '주소 확인 중…'}
+                  </Text>
 
                   <TouchableOpacity
                     style={[styles.addBtn, saving && styles.btnDisabled]}
@@ -537,12 +559,21 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: COLORS.primary },
   chipText: { color: COLORS.sub, fontWeight: '600', fontSize: 14 },
   chipTextActive: { color: '#fff' },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 12,
+    gap: 10,
+  },
+  orLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
+  orText: { fontSize: 12, color: COLORS.sub, fontWeight: '600' },
+  panelDivider: { height: 1, backgroundColor: '#EEF2F6', marginVertical: 16 },
+  selectedPlaceholder: { color: COLORS.sub, fontStyle: 'italic' },
   gpsBtn: {
     backgroundColor: '#EEF4FB',
     padding: 12,
     borderRadius: 10,
     alignItems: 'center',
-    marginBottom: 10,
     minHeight: 44,
     justifyContent: 'center',
   },

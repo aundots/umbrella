@@ -103,7 +103,11 @@ export async function fetchRelay(
   const res = await fetch(`${base}/relay?${q}`);
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new Error(err.message ?? `HTTP ${res.status}`);
+    const fallback =
+      res.status === 504
+        ? '서버 응답 시간 초과 — 잠시 후 다시 시도해 주세요'
+        : `HTTP ${res.status}`;
+    throw new Error(err.message ?? fallback);
   }
   return res.json() as Promise<LiveRelayReport>;
 }

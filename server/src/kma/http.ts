@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from './fetchUtil.js';
 import { KmaItem } from './types.js';
 
 const VILAGE_BASE = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0';
@@ -23,7 +24,7 @@ async function fetchKmaJson(
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithTimeout(url, undefined, 8_000);
   if (!res.ok) throw new Error(`KMA HTTP ${res.status}`);
   const json = (await res.json()) as {
     response?: {
@@ -62,7 +63,7 @@ export async function fetchRadarApi(
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithTimeout(url, undefined, 8_000);
   if (!res.ok) throw new Error(`KMA radar HTTP ${res.status}`);
   const json = (await res.json()) as {
     response?: {

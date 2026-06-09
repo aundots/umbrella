@@ -23,11 +23,15 @@ export function registerCronRoutes(app: FastifyInstance): void {
 
     try {
       const result = await runNotifyScan();
-      return {
+      const payload = {
         ok: true,
         ...result,
         at: new Date().toISOString(),
       };
+      if (result.errors > 0) {
+        req.log.warn({ result }, 'notify scan completed with location errors');
+      }
+      return payload;
     } catch (e) {
       req.log.error(e);
       return reply.status(500).send({

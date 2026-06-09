@@ -15,10 +15,49 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           API_BASE: https://umbrella-three-iota.vercel.app
         run: |
+          set -euo pipefail
           if [ -z "$CRON_SECRET" ]; then
             echo "CRON_SECRET repository secret is not set"
             exit 1
           fi
-          curl -fsS \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${API_BASE}/cron/notify"
+
+          body_file="$(mktemp)"
+          trap 'rm -f "$body_file"' EXIT
+
+          max_attempts=3
+          attempt=1
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "attempt ${attempt}/${max_attempts}: GET ${API_BASE}/cron/notify"
+            http_code="$(
+              curl -sS -o "$body_file" -w "%{http_code}" \
+                --connect-timeout 20 \
+                --max-time 120 \
+                -H "Authorization: Bearer ${CRON_SECRET}" \
+                "${API_BASE}/cron/notify" || echo "000"
+            )"
+
+            echo "HTTP ${http_code}"
+            cat "$body_file"
+            echo
+
+            if [ "$http_code" = "200" ]; then
+              exit 0
+            fi
+
+            if [ "$http_code" = "401" ]; then
+              echo "CRON_SECRET mismatch — set the same value in GitHub repo secrets and Vercel env"
+              exit 22
+            fi
+            if [ "$http_code" = "503" ]; then
+              echo "CRON_SECRET missing on Vercel — add CRON_SECRET to project env"
+              exit 22
+            fi
+
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              sleep 15
+            fi
+            attempt=$((attempt + 1))
+          done
+
+          echo "cron notify failed after ${max_attempts} attempts (last HTTP ${http_code})"
+          exit 22

@@ -1,22 +1,19 @@
+import {
+  dedupePlaces,
+  formatKoreanPlace,
+  isAdminDivisionQuery,
+  type KoreanAddressFields,
+} from './korean.js';
+import type { GeocodePlace } from './types.js';
+
+export type { GeocodePlace } from './types.js';
+
 const BASE = 'https://nominatim.openstreetmap.org';
 const USER_AGENT = 'umbrella-weather/1.0';
 
-interface NominatimAddress {
-  city?: string;
-  county?: string;
-  borough?: string;
-  town?: string;
-  village?: string;
-  suburb?: string;
-  neighbourhood?: string;
-  quarter?: string;
-  road?: string;
-  house_number?: string;
-}
-
 interface NominatimReverseResponse {
   display_name?: string;
-  address?: NominatimAddress;
+  address?: KoreanAddressFields;
 }
 
 interface NominatimSearchItem {
@@ -24,35 +21,9 @@ interface NominatimSearchItem {
   lat: string;
   lon: string;
   name?: string;
-  address?: NominatimAddress;
-}
-
-export interface GeocodePlace {
-  name: string;
-  address: string;
-  lat: number;
-  lng: number;
-}
-
-function formatAddress(address?: NominatimAddress, fallback?: string): string {
-  if (!address) return fallback?.split(',')[0]?.trim() ?? '주소 없음';
-
-  const region =
-    address.city ??
-    address.county ??
-    address.borough ??
-    address.town ??
-    address.village;
-  const district = address.suburb ?? address.neighbourhood ?? address.quarter;
-  const street = [address.road, address.house_number].filter(Boolean).join(' ');
-
-  return [region, district, street].filter(Boolean).join(' ') || fallback?.split(',')[0]?.trim() || '주소 없음';
-}
-
-function pickPlaceName(item: NominatimSearchItem): string {
-  if (item.name?.trim()) return item.name.trim();
-  const addr = formatAddress(item.address, item.display_name);
-  return addr.split(' ')[0] ?? addr;
+  type?: string;
+  class?: string;
+  address?: KoreanAddressFields;
 }
 
 async function nominatimFetch<T>(path: string): Promise<T> {
@@ -68,32 +39,58 @@ async function nominatimFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function reverseGeocode(lat: number, lng: number): Promise<GeocodePlace> {
-  const data = await nominatimFetch<NominatimReverseResponse>(
-    `/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko&zoom=18`,
-  );
-  const address = formatAddress(data.address, data.display_name);
-  const name = address.split(' ').slice(-1)[0] ?? '현재 위치';
+function nominatimItemToPlace(item: NominatimSearchItem): GeocodePlace | null {
+  const lat = Number(item.lat);
+  const lng = Number(item.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const { name, address } = formatKoreanPlace(item.address, item.display_name, item.name);
   return { name, address, lat, lng };
 }
 
-export async function searchPlaces(query: string): Promise<GeocodePlace[]> {
+async function nominatimSearchQuery(q: string, limit = 20): Promise<GeocodePlace[]> {
+  const params = new URLSearchParams({
+    q,
+    format: 'json',
+    countrycodes: 'kr',
+    limit: String(limit),
+    'accept-language': 'ko',
+    addressdetails: '1',
+    dedupe: '0',
+  });
+
+  const items = await nominatimFetch<NominatimSearchItem[]>(`/search?${params}`);
+  return items.map(nominatimItemToPlace).filter((p): p is GeocodePlace => p != null);
+}
+
+export async function searchNominatimPlaces(query: string): Promise<GeocodePlace[]> {
   const q = query.trim();
   if (q.length < 2) return [];
 
-  const items = await nominatimFetch<NominatimSearchItem[]>(
-    `/search?q=${encodeURIComponent(q)}&format=json&countrycodes=kr&limit=10&accept-language=ko`,
-  );
+  const primary = await nominatimSearchQuery(q, 20);
+  const merged = [...primary];
 
-  return items.map((item) => {
-    const lat = Number(item.lat);
-    const lng = Number(item.lon);
-    const address = formatAddress(item.address, item.display_name);
-    return {
-      name: pickPlaceName(item),
-      address,
-      lat,
-      lng,
-    };
-  }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
+  if (isAdminDivisionQuery(q) && q.length >= 2) {
+    const stem = q.replace(/(특별시|광역시|특별자치시|특별자치도|시|군|구|읍|면|동|리)$/, '').trim();
+    if (stem.length >= 2 && stem !== q) {
+      const extra = await nominatimSearchQuery(stem, 15);
+      const needle = q.replace(/동$/, '');
+      for (const place of extra) {
+        if (place.address.includes(needle) || place.name.includes(needle)) {
+          merged.push(place);
+        }
+      }
+    }
+  }
+
+  return dedupePlaces(merged, 20);
+}
+
+export async function reverseGeocode(lat: number, lng: number): Promise<GeocodePlace> {
+  const data = await nominatimFetch<NominatimReverseResponse>(
+    `/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko&zoom=18&addressdetails=1`,
+  );
+  const { name, address } = formatKoreanPlace(data.address, data.display_name);
+  const shortName = address.split(' ').slice(-1)[0] ?? name;
+  return { name: shortName, address, lat, lng };
 }

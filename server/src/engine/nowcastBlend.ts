@@ -1,6 +1,9 @@
+import { withDeadline } from '../kma/fetchUtil.js';
 import { fetchMapleAtLocation, MapleForecastSlot } from '../kma/maple.js';
 import { PrecipType } from '../kma/types.js';
 import { fetchHsrRainGrid, rainRateAt } from '../kma/wthrRadar.js';
+
+const NOWCAST_BUDGET_MS = 12_000;
 
 export interface NowcastContext {
   hsrAvailable: boolean;
@@ -11,7 +14,7 @@ export interface NowcastContext {
   mapleSlots: MapleForecastSlot[];
 }
 
-export async function loadNowcastContext(lat: number, lng: number): Promise<NowcastContext> {
+async function loadNowcastContextInner(lat: number, lng: number): Promise<NowcastContext> {
   const empty: NowcastContext = {
     hsrAvailable: false,
     mapleAvailable: false,
@@ -40,6 +43,18 @@ export async function loadNowcastContext(lat: number, lng: number): Promise<Nowc
   }
 
   return empty;
+}
+
+export async function loadNowcastContext(lat: number, lng: number): Promise<NowcastContext> {
+  const empty: NowcastContext = {
+    hsrAvailable: false,
+    mapleAvailable: false,
+    hsrObsTime: null,
+    hsrRateMmH: null,
+    mapleBaseTime: null,
+    mapleSlots: [],
+  };
+  return withDeadline(loadNowcastContextInner(lat, lng), NOWCAST_BUDGET_MS, empty);
 }
 
 function rateToType(rate: number): PrecipType {

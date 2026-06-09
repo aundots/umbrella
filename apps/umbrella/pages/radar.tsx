@@ -5,13 +5,14 @@ import {
   Image,
   ScrollView,
   StyleSheet,
-  Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
+import { Button, Txt } from '@toss/tds-react-native';
 import { navigateWithAd } from '../src/ads/navigateWithAd';
 import { COLORS } from '../src/components/RelayCard';
+import { BackLink, ErrorBanner, NavLink } from '../src/components/ui';
+import { sharedStyles, RADIUS } from '../src/theme';
 import { fetchRadar, formatTime, radarImageUrl, RadarFrame } from '../src/services/api';
 
 export default function RadarScreen() {
@@ -32,25 +33,25 @@ export default function RadarScreen() {
   }, []);
 
   const current = frames[index];
-  const width = Dimensions.get('window').width - 40;
+  const width = Dimensions.get('window').width - 48;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <TouchableOpacity onPress={() => navigation.navigate('/')}>
-        <Text style={styles.back}>← 돌아가기</Text>
-      </TouchableOpacity>
-      <Text style={styles.title}>레이더</Text>
-      <Text style={styles.sub}>기상청 종합 레이더 · 전국 강수 이동</Text>
+    <ScrollView style={sharedStyles.screen} contentContainerStyle={sharedStyles.content}>
+      <BackLink onPress={() => navigation.navigate('/')} />
+      <Txt typography="t2" fontWeight="bold" color={COLORS.text}>
+        레이더
+      </Txt>
+      <Txt typography="t7" color={COLORS.sub} style={styles.sub}>
+        기상청 종합 레이더 · 전국 강수 이동
+      </Txt>
 
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 32 }} />
+        <ActivityIndicator color={COLORS.primary} style={styles.loader} />
       ) : error ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.errorHint}>
-            공공데이터포털에서 「레이더영상 조회서비스」 활용신청 후 다시 시도해 주세요.
-          </Text>
-        </View>
+        <ErrorBanner
+          message={error}
+          hint="공공데이터포털에서 「레이더영상 조회서비스」 활용신청 후 다시 시도해 주세요."
+        />
       ) : current ? (
         <>
           <View style={styles.imageWrap}>
@@ -60,81 +61,56 @@ export default function RadarScreen() {
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.timeLabel}>
+          <Txt typography="t5" fontWeight="semibold" color={COLORS.text} style={styles.timeLabel}>
             {current.time ? formatTime(current.time) : `프레임 ${index + 1}/${frames.length}`}
-          </Text>
+          </Txt>
           <View style={styles.controls}>
-            <TouchableOpacity
-              style={[styles.ctrlBtn, index <= 0 && styles.ctrlDisabled]}
+            <Button
+              size="medium"
+              style="weak"
+              type="primary"
               disabled={index <= 0}
               onPress={() => setIndex((i) => Math.max(0, i - 1))}
             >
-              <Text style={styles.ctrlText}>◀ 이전</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.ctrlBtn, index >= frames.length - 1 && styles.ctrlDisabled]}
+              ◀ 이전
+            </Button>
+            <Button
+              size="medium"
               disabled={index >= frames.length - 1}
               onPress={() => setIndex((i) => Math.min(frames.length - 1, i + 1))}
             >
-              <Text style={styles.ctrlText}>다음 ▶</Text>
-            </TouchableOpacity>
+              다음 ▶
+            </Button>
           </View>
-          <TouchableOpacity
-            style={styles.linkBtn}
+          <NavLink
+            label="시간별 중계표 보기"
             onPress={() => navigateWithAd((r) => navigation.navigate(r), '/timeline')}
-          >
-            <Text style={styles.linkText}>시간별 중계표 보기 →</Text>
-          </TouchableOpacity>
+          />
         </>
       ) : (
-        <Text style={styles.empty}>표시할 레이더 영상이 없어요.</Text>
+        <Txt typography="t6" color={COLORS.sub} style={styles.empty}>
+          표시할 레이더 영상이 없어요.
+        </Txt>
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: 20, paddingBottom: 40 },
-  back: { color: COLORS.primary, marginBottom: 12, fontWeight: '600' },
-  title: { fontSize: 24, fontWeight: '800', color: COLORS.text },
-  sub: { fontSize: 13, color: COLORS.sub, marginBottom: 16 },
+  sub: { marginTop: 4, marginBottom: 20 },
+  loader: { marginTop: 32 },
   imageWrap: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: '#1B1D27',
+    borderRadius: RADIUS.md,
     overflow: 'hidden',
     alignItems: 'center',
   },
-  timeLabel: {
-    textAlign: 'center',
-    marginTop: 12,
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
+  timeLabel: { textAlign: 'center', marginTop: 16 },
   controls: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 12,
-    marginTop: 16,
-  },
-  ctrlBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-  },
-  ctrlDisabled: { opacity: 0.4 },
-  ctrlText: { color: '#fff', fontWeight: '600' },
-  linkBtn: { marginTop: 20, alignItems: 'center' },
-  linkText: { color: COLORS.primary, fontWeight: '600', fontSize: 15 },
-  errorBox: {
-    backgroundColor: '#FFF5F5',
-    padding: 16,
-    borderRadius: 12,
     marginTop: 20,
   },
-  errorText: { color: '#E53E3E', fontWeight: '600' },
-  errorHint: { color: COLORS.sub, fontSize: 12, marginTop: 8, lineHeight: 18 },
-  empty: { color: COLORS.sub, marginTop: 24, textAlign: 'center' },
+  empty: { marginTop: 32, textAlign: 'center' },
 });

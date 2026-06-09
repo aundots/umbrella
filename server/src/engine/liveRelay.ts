@@ -1,3 +1,4 @@
+import { withDeadline } from '../kma/fetchUtil.js';
 import {
   fetchLocationWeather,
   ncstPrecipType,
@@ -123,17 +124,32 @@ function computeConfidence(
   return Math.min(95, Math.max(40, c));
 }
 
-export async function buildLiveRelayReport(params: {
-  locationId: string;
-  locationName: string;
-  lat: number;
-  lng: number;
-}): Promise<LiveRelayReport> {
+export interface LiveRelayReportOptions {
+  /** Skip vilage forecast detail (notify cron — saves KMA round-trips). */
+  skipDetail?: boolean;
+}
+
+export async function buildLiveRelayReport(
+  params: {
+    locationId: string;
+    locationName: string;
+    lat: number;
+    lng: number;
+  },
+  options: LiveRelayReportOptions = {},
+): Promise<LiveRelayReport> {
   const now = new Date();
   const [{ nx, ny, ncst, fcst }, nowcast] = await Promise.all([
     fetchLocationWeather(params.lat, params.lng),
     loadNowcastContext(params.lat, params.lng),
   ]);
+  const detailPromise = options.skipDetail
+    ? Promise.resolve(undefined as ForecastDetail | undefined)
+    : withDeadline(
+        buildForecastDetail(nx, ny, ncst, fcst),
+        5_000,
+        undefined as ForecastDetail | undefined,
+      ).catch(() => undefined);
 
   let currentType = ncstPrecipType(ncst);
   let currentRate = rn1ToRateMmH(ncstRn1(ncst));
@@ -191,12 +207,7 @@ export async function buildLiveRelayReport(params: {
       nowcastConfidenceBoost(nowcast),
   );
 
-  let detail: ForecastDetail | undefined;
-  try {
-    detail = await buildForecastDetail(nx, ny, ncst, fcst);
-  } catch {
-    detail = undefined;
-  }
+  const detail = await detailPromise;
 
   return {
     locationId: params.locationId,

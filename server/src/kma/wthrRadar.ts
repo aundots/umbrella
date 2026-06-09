@@ -1,3 +1,5 @@
+import { getCached, setCache } from './cache.js';
+import { fetchWithTimeout } from './fetchUtil.js';
 import { getServiceKey } from './http.js';
 import { latLngToRadarGrid, parseGridValues, sampleGridAt } from './radarGrid.js';
 
@@ -49,7 +51,7 @@ async function fetchRadarGrid(
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithTimeout(url, undefined, 6_000);
   if (!res.ok) throw new Error(`WthrRadar HTTP ${res.status}`);
   const json = (await res.json()) as {
     response?: {
@@ -82,23 +84,32 @@ async function fetchRadarGrid(
 async function fetchWithFallback(
   path: string,
   extra: Record<string, string>,
+  attempts = 3,
 ): Promise<RadarGridField | null> {
-  for (const dt of candidateRadarDateTimes()) {
-    try {
-      const grid = await fetchRadarGrid(path, dt, extra);
-      if (grid && grid.values.length > 0) return grid;
-    } catch {
-      continue;
-    }
-  }
-  return null;
+  const tries = await Promise.all(
+    candidateRadarDateTimes(undefined, attempts).map(async (dt) => {
+      try {
+        return await fetchRadarGrid(path, dt, extra);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return tries.find((grid) => grid != null && grid.values.length > 0) ?? null;
 }
 
 export async function fetchHsrRainGrid(): Promise<RadarGridField | null> {
-  return fetchWithFallback('getCompCappiQcdAll', {
+  const cacheKey = 'hsr:comp-cappi';
+  const cached = getCached<RadarGridField>(cacheKey);
+  if (cached) return cached;
+
+  const grid = await fetchWithFallback('getCompCappiQcdAll', {
     compType: 'HSP',
     dataTypeCd: 'RN',
   });
+  if (grid) setCache(cacheKey, grid);
+  return grid;
 }
 
 export function rainRateAt(

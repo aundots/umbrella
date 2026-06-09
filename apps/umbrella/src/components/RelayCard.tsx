@@ -1,16 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-
-const COLORS = {
-  bg: '#F4F8FC',
-  card: '#FFFFFF',
-  primary: '#5B9BD5',
-  text: '#191F28',
-  sub: '#6B7684',
-  live: '#3182F6',
-  approaching: '#F59E0B',
-  clear: '#22C55E',
-};
+import { StyleSheet, View } from 'react-native';
+import { Txt } from '@toss/tds-react-native';
+import { COLORS, RADIUS, cardShadow } from '../theme';
 
 interface Props {
   title: string;
@@ -21,46 +12,48 @@ interface Props {
 export function RelayCard({ title, children, accent = COLORS.primary }: Props) {
   return (
     <View style={styles.card}>
-      <View style={[styles.dot, { backgroundColor: accent }]} />
-      <Text style={styles.title}>{title}</Text>
+      <View style={styles.header}>
+        <View style={[styles.accent, { backgroundColor: accent }]} />
+        <Txt typography="t7" fontWeight="semibold" color={COLORS.sub}>
+          {title}
+        </Txt>
+      </View>
       <View style={styles.body}>{children}</View>
     </View>
   );
 }
 
 export function MetaLine({ text }: { text: string }) {
-  return <Text style={styles.meta}>{text}</Text>;
+  return (
+    <Txt typography="t7" color={COLORS.sub} style={styles.meta}>
+      {text}
+    </Txt>
+  );
 }
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.card,
-    borderRadius: 16,
+    borderRadius: RADIUS.md,
     padding: 20,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    ...cardShadow,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 8,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
-  title: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.sub,
-    marginBottom: 8,
+  accent: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   body: {
     gap: 4,
   },
   meta: {
-    fontSize: 12,
-    color: COLORS.sub,
     marginTop: 4,
   },
 });
