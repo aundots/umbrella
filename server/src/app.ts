@@ -13,6 +13,7 @@ import { registerLegalRoutes } from './routes/legal.js';
 import { registerCronRoutes } from './routes/cron.js';
 import { registerGeocodeRoutes } from './routes/geocode.js';
 import { registerTossRoutes } from './routes/toss.js';
+import { persistenceMode } from './db/persistence.js';
 import { isMtlsConfigured } from './toss/mtls.js';
 
 export async function buildApp() {
@@ -27,6 +28,7 @@ export async function buildApp() {
     ok: true,
     service: 'umbrella-server',
     mtls: isMtlsConfigured(),
+    db: persistenceMode(),
   }));
 
   app.get<{ Querystring: { lat: string; lng: string; name?: string } }>(
@@ -64,7 +66,7 @@ export async function buildApp() {
     const { userKey } = req.query;
     if (!userKey) return reply.status(400).send({ error: 'userKey required' });
 
-    const locations = listLocations(userKey);
+    const locations = await listLocations(userKey);
     if (locations.length === 0) {
       return { reports: [] };
     }
@@ -88,8 +90,7 @@ export async function buildApp() {
     async (req, reply) => {
       const { userKey, notifyConsent } = req.body ?? {};
       if (!userKey) return reply.status(400).send({ error: 'userKey required' });
-      const user = upsertUser(String(userKey), Boolean(notifyConsent));
-      return user;
+      return upsertUser(String(userKey), Boolean(notifyConsent));
     },
   );
 
@@ -114,7 +115,7 @@ export async function buildApp() {
     if (!userKey || !name || lat == null || lng == null) {
       return reply.status(400).send({ error: 'userKey, name, lat, lng required' });
     }
-    const locs = listLocations(userKey);
+    const locs = await listLocations(userKey);
     if (locs.length >= 5) {
       return reply.status(400).send({ error: 'max 5 locations' });
     }
@@ -134,7 +135,7 @@ export async function buildApp() {
   }>('/locations/:id', async (req, reply) => {
     const userKey = req.query.userKey;
     if (!userKey) return reply.status(400).send({ error: 'userKey required' });
-    const updated = updateLocation(userKey, req.params.id, req.body ?? {});
+    const updated = await updateLocation(userKey, req.params.id, req.body ?? {});
     if (!updated) return reply.status(404).send({ error: 'not found' });
     return updated;
   });
@@ -144,7 +145,7 @@ export async function buildApp() {
     async (req, reply) => {
       const userKey = req.query.userKey;
       if (!userKey) return reply.status(400).send({ error: 'userKey required' });
-      const ok = deleteLocation(userKey, req.params.id);
+      const ok = await deleteLocation(userKey, req.params.id);
       if (!ok) return reply.status(404).send({ error: 'not found' });
       return { ok: true };
     },

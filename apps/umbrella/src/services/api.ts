@@ -91,14 +91,18 @@ export async function saveLocation(
   return res.json() as Promise<SavedLocation>;
 }
 
-export async function sendTestPush(userKey: string): Promise<{ resultType?: string; error?: { reason?: string } }> {
+export async function sendTestPush(
+  userKey: string,
+  kind: 'rain' | 'clear' = 'rain',
+): Promise<{ resultType?: string; error?: { reason?: string } }> {
   const base = getApiBaseUrl();
   const res = await fetch(`${base}/toss/push/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       userKey,
-      context: { name: '30분 후 테스트 비' },
+      kind,
+      context: kind === 'clear' ? { msg: '지금 집에' } : { msg: '30분 후 집에' },
     }),
   });
   const json = (await res.json()) as { resultType?: string; error?: { reason?: string }; message?: string };

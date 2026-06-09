@@ -100,15 +100,20 @@ export default function SettingsScreen() {
     await reload();
   };
 
-  const onTestPush = async () => {
+  const onTestPush = async (kind: 'rain' | 'clear') => {
     if (!userKey) {
       Alert.alert('로그인 필요', '토스 로그인 후 테스트할 수 있어요.');
       return;
     }
     setPushTesting(true);
     try {
-      await sendTestPush(userKey);
-      Alert.alert('테스트 발송', '푸시 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.');
+      await sendTestPush(userKey, kind);
+      Alert.alert(
+        '테스트 발송',
+        kind === 'clear'
+          ? '비 그침 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.'
+          : '비 예고 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.',
+      );
     } catch (e) {
       Alert.alert(
         '테스트 실패',
@@ -152,15 +157,24 @@ export default function SettingsScreen() {
       </View>
 
       {userKey ? (
-        <TouchableOpacity
-          style={[styles.testPushBtn, pushTesting && styles.testPushBtnDisabled]}
-          onPress={onTestPush}
-          disabled={pushTesting}
-        >
-          <Text style={styles.testPushBtnText}>
-            {pushTesting ? '테스트 발송 중…' : '테스트 푸시 보내기'}
-          </Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={[styles.testPushBtn, pushTesting && styles.testPushBtnDisabled]}
+            onPress={() => onTestPush('rain')}
+            disabled={pushTesting}
+          >
+            <Text style={styles.testPushBtnText}>
+              {pushTesting ? '테스트 발송 중…' : '비 예고 테스트'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.testPushBtn, pushTesting && styles.testPushBtnDisabled]}
+            onPress={() => onTestPush('clear')}
+            disabled={pushTesting}
+          >
+            <Text style={styles.testPushBtnText}>비 그침 테스트</Text>
+          </TouchableOpacity>
+        </>
       ) : null}
 
       <Text style={styles.section}>알림 시점</Text>

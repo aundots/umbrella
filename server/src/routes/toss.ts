@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { persistenceMode } from '../db/persistence.js';
 import { deleteUserData, upsertUser } from '../db/store.js';
 import { getMtlsDiagnostics, isMtlsConfigured } from '../toss/mtls.js';
 import {
@@ -6,6 +7,7 @@ import {
   removeAccessByUserKey,
 } from '../toss/login.js';
 import {
+  DEFAULT_PUSH_CLEAR_CONTEXT,
   DEFAULT_PUSH_CONTEXT,
   sendFunctionalMessage,
   sendTestFunctionalMessage,
@@ -13,26 +15,36 @@ import {
 
 function getPushStatus() {
   const templateCode = process.env.TOSS_PUSH_TEMPLATE_CODE?.trim();
+  const clearTemplateCode = process.env.TOSS_PUSH_TEMPLATE_CODE_CLEAR?.trim();
   const deploymentId = process.env.TOSS_DEPLOYMENT_ID?.trim();
   const mtls = isMtlsConfigured();
   const missing: string[] = [];
 
   if (!mtls) missing.push('mTLS (MTLS_CERT_PEM_B64 / MTLS_KEY_PEM_B64)');
-  if (!templateCode) missing.push('TOSS_PUSH_TEMPLATE_CODE (콘솔 승인 후)');
+  if (!templateCode) missing.push('TOSS_PUSH_TEMPLATE_CODE (강수 예고, 콘솔 승인 후)');
+  if (!clearTemplateCode) missing.push('TOSS_PUSH_TEMPLATE_CODE_CLEAR (강수 종료, 콘솔 승인 후)');
   if (!deploymentId) missing.push('TOSS_DEPLOYMENT_ID (최신 .ait deploymentId)');
   if (!process.env.CRON_SECRET?.trim()) missing.push('CRON_SECRET');
 
   return {
-    ready: mtls && Boolean(templateCode) && Boolean(deploymentId),
+    ready: mtls && Boolean(templateCode) && Boolean(clearTemplateCode) && Boolean(deploymentId),
+    db: persistenceMode(),
     mtls,
     templateConfigured: Boolean(templateCode),
+    clearTemplateConfigured: Boolean(clearTemplateCode),
     deploymentIdConfigured: Boolean(deploymentId),
     deploymentId: deploymentId ?? null,
-    templateVariables: ['name'],
-    templateExample: {
-      title: '강수알림',
-      body: '{name}',
-      sampleName: '30분 후 집 비',
+    templates: {
+      rain: {
+        code: templateCode ?? null,
+        body: '{{ msg }} 비 와요.',
+        sampleContext: DEFAULT_PUSH_CONTEXT,
+      },
+      clear: {
+        code: clearTemplateCode ?? null,
+        body: '{{ msg }} 비 그쳤어요.',
+        sampleContext: DEFAULT_PUSH_CLEAR_CONTEXT,
+      },
     },
     cronHint: 'GitHub Actions notify-cron.yml (5분마다)',
     missing,
@@ -68,7 +80,7 @@ export function registerTossRoutes(app: FastifyInstance): void {
           });
         }
 
-        upsertUser(userKey, true);
+        await upsertUser(userKey, true);
         return {
           userKey,
           scope: meRes?.data.success?.scope,
@@ -102,7 +114,7 @@ export function registerTossRoutes(app: FastifyInstance): void {
           return reply.status(tokenRes.status >= 400 ? tokenRes.status : 502).send(tokenRes.data);
         }
 
-        upsertUser(userKey, true);
+        await upsertUser(userKey, true);
         return { userKey, scope: meRes?.data.success?.scope };
       } catch (e) {
         req.log.error(e);
@@ -123,7 +135,7 @@ export function registerTossRoutes(app: FastifyInstance): void {
       }
 
       const key = String(userKey);
-      deleteUserData(key);
+      await deleteUserData(key);
 
       if (isMtlsConfigured()) {
         try {
@@ -166,13 +178,19 @@ export function registerTossRoutes(app: FastifyInstance): void {
   app.post<{
     Body: {
       userKey: string;
+      kind?: 'rain' | 'clear';
       templateSetCode?: string;
       deploymentId?: string;
       context?: Record<string, string>;
     };
   }>('/toss/push/test', async (req, reply) => {
-      const { userKey, templateSetCode, deploymentId, context } = req.body ?? {};
-      const template = templateSetCode ?? process.env.TOSS_PUSH_TEMPLATE_CODE;
+      const { userKey, kind = 'rain', templateSetCode, deploymentId, context } = req.body ?? {};
+      const template =
+        templateSetCode ??
+        (kind === 'clear'
+          ? process.env.TOSS_PUSH_TEMPLATE_CODE_CLEAR
+          : process.env.TOSS_PUSH_TEMPLATE_CODE);
+      const defaults = kind === 'clear' ? DEFAULT_PUSH_CLEAR_CONTEXT : DEFAULT_PUSH_CONTEXT;
       if (!userKey || !template) {
         return reply.status(400).send({ error: 'userKey and templateSetCode required' });
       }
@@ -182,7 +200,7 @@ export function registerTossRoutes(app: FastifyInstance): void {
           userKey,
           templateSetCode: template,
           deploymentId,
-          context: { ...DEFAULT_PUSH_CONTEXT, ...context },
+          context: { ...defaults, ...context },
         });
         return reply.status(status).send(data);
       } catch (e) {
