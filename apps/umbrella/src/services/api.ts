@@ -91,6 +91,23 @@ export async function saveLocation(
   return res.json() as Promise<SavedLocation>;
 }
 
+export async function sendTestPush(userKey: string): Promise<{ resultType?: string; error?: { reason?: string } }> {
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/toss/push/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userKey,
+      context: { location: '테스트', minutes: '30', status: 'approaching' },
+    }),
+  });
+  const json = (await res.json()) as { resultType?: string; error?: { reason?: string }; message?: string };
+  if (!res.ok) {
+    throw new Error(json.error?.reason ?? json.message ?? `HTTP ${res.status}`);
+  }
+  return json;
+}
+
 export async function registerUser(userKey: string, notifyConsent: boolean): Promise<void> {
   const base = getApiBaseUrl();
   await fetch(`${base}/users/register`, {

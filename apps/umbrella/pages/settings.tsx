@@ -20,6 +20,7 @@ import {
   registerUser,
   saveLocation,
   SavedLocation,
+  sendTestPush,
 } from '../src/services/api';
 import { GeocodePlace } from '../src/services/geocode';
 
@@ -36,6 +37,7 @@ export default function SettingsScreen() {
   const [beforeMin, setBeforeMin] = useState<30 | 60>(30);
   const [name, setName] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<GeocodePlace | null>(null);
+  const [pushTesting, setPushTesting] = useState(false);
 
   useEffect(() => {
     if (userKey) registerUser(userKey, notify);
@@ -98,6 +100,25 @@ export default function SettingsScreen() {
     await reload();
   };
 
+  const onTestPush = async () => {
+    if (!userKey) {
+      Alert.alert('로그인 필요', '토스 로그인 후 테스트할 수 있어요.');
+      return;
+    }
+    setPushTesting(true);
+    try {
+      await sendTestPush(userKey);
+      Alert.alert('테스트 발송', '푸시 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.');
+    } catch (e) {
+      Alert.alert(
+        '테스트 실패',
+        e instanceof Error ? e.message : '템플릿 승인·TOSS_PUSH_TEMPLATE_CODE 설정을 확인해 주세요.',
+      );
+    } finally {
+      setPushTesting(false);
+    }
+  };
+
   const goBack = () => {
     navigation.navigate('/');
   };
@@ -129,6 +150,18 @@ export default function SettingsScreen() {
         <Text style={styles.label}>강수 알림</Text>
         <Switch value={notify} onValueChange={setNotify} />
       </View>
+
+      {userKey ? (
+        <TouchableOpacity
+          style={[styles.testPushBtn, pushTesting && styles.testPushBtnDisabled]}
+          onPress={onTestPush}
+          disabled={pushTesting}
+        >
+          <Text style={styles.testPushBtnText}>
+            {pushTesting ? '테스트 발송 중…' : '테스트 푸시 보내기'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       <Text style={styles.section}>알림 시점</Text>
       <View style={styles.row}>
@@ -223,6 +256,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   label: { fontSize: 16, color: COLORS.text, fontWeight: '600' },
+  testPushBtn: {
+    backgroundColor: '#EEF4FB',
+    padding: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  testPushBtnDisabled: { opacity: 0.6 },
+  testPushBtnText: { color: COLORS.primary, fontWeight: '700' },
   section: {
     fontSize: 14,
     fontWeight: '700',

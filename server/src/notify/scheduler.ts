@@ -1,7 +1,7 @@
 import { listNotifyTargets } from '../db/store.js';
 import { buildLiveRelayReport } from '../engine/liveRelay.js';
 import { isMtlsConfigured } from '../toss/mtls.js';
-import { sendFunctionalMessage } from '../toss/messenger.js';
+import { DEFAULT_PUSH_CONTEXT, sendFunctionalMessage } from '../toss/messenger.js';
 
 const sent = new Map<string, number>();
 const COOLDOWN_MS = 30 * 60 * 1000;
@@ -20,6 +20,7 @@ function isTossUserKey(userKey: string): boolean {
 
 function buildPushContext(locName: string, report: Awaited<ReturnType<typeof buildLiveRelayReport>>) {
   return {
+    ...DEFAULT_PUSH_CONTEXT,
     location: locName,
     minutes: String(report.arrival.inMinutes ?? 0),
     status: report.relayStatus,

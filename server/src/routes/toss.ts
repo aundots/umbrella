@@ -5,13 +5,42 @@ import {
   exchangeAuthorizationCode,
   removeAccessByUserKey,
 } from '../toss/login.js';
-import { sendFunctionalMessage, sendTestFunctionalMessage } from '../toss/messenger.js';
+import {
+  DEFAULT_PUSH_CONTEXT,
+  sendFunctionalMessage,
+  sendTestFunctionalMessage,
+} from '../toss/messenger.js';
+
+function getPushStatus() {
+  const templateCode = process.env.TOSS_PUSH_TEMPLATE_CODE?.trim();
+  const deploymentId = process.env.TOSS_DEPLOYMENT_ID?.trim();
+  const mtls = isMtlsConfigured();
+  const missing: string[] = [];
+
+  if (!mtls) missing.push('mTLS (MTLS_CERT_PEM_B64 / MTLS_KEY_PEM_B64)');
+  if (!templateCode) missing.push('TOSS_PUSH_TEMPLATE_CODE (콘솔 승인 후)');
+  if (!deploymentId) missing.push('TOSS_DEPLOYMENT_ID (최신 .ait deploymentId)');
+  if (!process.env.CRON_SECRET?.trim()) missing.push('CRON_SECRET');
+
+  return {
+    ready: mtls && Boolean(templateCode) && Boolean(deploymentId),
+    mtls,
+    templateConfigured: Boolean(templateCode),
+    deploymentIdConfigured: Boolean(deploymentId),
+    deploymentId: deploymentId ?? null,
+    templateVariables: ['location', 'minutes', 'status'],
+    cronHint: 'GitHub Actions notify-cron.yml (5분마다)',
+    missing,
+  };
+}
 
 export function registerTossRoutes(app: FastifyInstance): void {
   app.get('/toss/mtls-status', async () => ({
     apiBase: process.env.TOSS_API_BASE_URL ?? 'https://apps-in-toss-api.toss.im',
     ...getMtlsDiagnostics(),
   }));
+
+  app.get('/toss/push-status', async () => getPushStatus());
 
   app.post<{ Body: { authorizationCode: string; referrer: string } }>(
     '/toss/auth/session',
@@ -117,7 +146,7 @@ export function registerTossRoutes(app: FastifyInstance): void {
       const { status, data } = await sendFunctionalMessage({
         userKey,
         templateSetCode: template,
-        context: context ?? {},
+        context: { ...DEFAULT_PUSH_CONTEXT, ...context },
       });
       return reply.status(status).send(data);
     } catch (e) {
@@ -129,18 +158,26 @@ export function registerTossRoutes(app: FastifyInstance): void {
     }
   });
 
-  app.post<{ Body: { templateSetCode?: string; context?: Record<string, string> } }>(
-    '/toss/push/test',
-    async (req, reply) => {
-      const template = req.body?.templateSetCode ?? process.env.TOSS_PUSH_TEMPLATE_CODE;
-      if (!template) {
-        return reply.status(400).send({ error: 'templateSetCode required' });
+  app.post<{
+    Body: {
+      userKey: string;
+      templateSetCode?: string;
+      deploymentId?: string;
+      context?: Record<string, string>;
+    };
+  }>('/toss/push/test', async (req, reply) => {
+      const { userKey, templateSetCode, deploymentId, context } = req.body ?? {};
+      const template = templateSetCode ?? process.env.TOSS_PUSH_TEMPLATE_CODE;
+      if (!userKey || !template) {
+        return reply.status(400).send({ error: 'userKey and templateSetCode required' });
       }
 
       try {
         const { status, data } = await sendTestFunctionalMessage({
+          userKey,
           templateSetCode: template,
-          context: req.body?.context ?? {},
+          deploymentId,
+          context: { ...DEFAULT_PUSH_CONTEXT, ...context },
         });
         return reply.status(status).send(data);
       } catch (e) {
