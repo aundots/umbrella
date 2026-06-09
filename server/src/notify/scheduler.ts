@@ -1,4 +1,4 @@
-import { listNotifyTargets } from '../db/store.js';
+import { listNotifyTargets, type SavedLocation } from '../db/store.js';
 import { loadRelayPhases, saveRelayPhases, type RelayPhase } from '../db/persistence.js';
 import { buildLiveRelayReport } from '../engine/liveRelay.js';
 import { isMtlsConfigured } from '../toss/mtls.js';
@@ -7,7 +7,6 @@ import {
   buildPushMsgClear,
   sendFunctionalMessage,
 } from '../toss/messenger.js';
-import type { SavedLocation } from '../db/store.js';
 
 const sent = new Map<string, number>();
 const COOLDOWN_MS = 30 * 60 * 1000;

@@ -74,10 +74,19 @@ export async function searchNominatimPlaces(query: string): Promise<GeocodePlace
     const stem = q.replace(/(특별시|광역시|특별자치시|특별자치도|시|군|구|읍|면|동|리)$/, '').trim();
     if (stem.length >= 2 && stem !== q) {
       const extra = await nominatimSearchQuery(stem, 15);
-      const needle = q.replace(/동$/, '');
+      const needle = q.replace(/(구|동|읍|면|리)$/, '');
       for (const place of extra) {
-        if (place.address.includes(needle) || place.name.includes(needle)) {
+        if (place.address.includes(q) || place.address.includes(needle) || place.name.includes(needle)) {
           merged.push(place);
+        }
+      }
+    }
+    if (q.endsWith('동') && primary.length <= 3) {
+      const dongStem = q.replace(/\d*동$/, '') || q.slice(0, -1);
+      if (dongStem.length >= 2) {
+        const extra = await nominatimSearchQuery(dongStem, 15);
+        for (const place of extra) {
+          if (place.address.includes(q)) merged.push(place);
         }
       }
     }
@@ -91,6 +100,8 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeocodeP
     `/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko&zoom=18&addressdetails=1`,
   );
   const { name, address } = formatKoreanPlace(data.address, data.display_name);
-  const shortName = address.split(' ').slice(-1)[0] ?? name;
+  const dong =
+    data.address?.suburb ?? data.address?.quarter ?? data.address?.neighbourhood ?? '';
+  const shortName = dong || address.split(' ').find((p) => /동$|읍$|면$|리$/.test(p)) || name;
   return { name: shortName, address, lat, lng };
 }

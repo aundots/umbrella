@@ -49,7 +49,7 @@ export function LocationSearch({
       <SearchField
         placeholder={placeholder}
         value={query}
-        onChangeText={setQuery}
+        onChange={(e) => setQuery(e.nativeEvent.text)}
         hasClearButton
         style={styles.search}
       />

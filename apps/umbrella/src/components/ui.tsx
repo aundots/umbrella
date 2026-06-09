@@ -102,23 +102,24 @@ export function SectionHeader({
   description?: string;
 }) {
   return (
-    <ListHeader
-      title={
-        <ListHeader.TitleParagraph typography="t7" fontWeight="bold" color={COLORS.subDark}>
-          {title}
-        </ListHeader.TitleParagraph>
-      }
-      lower={
-        description ? (
-          <ListHeader.DescriptionParagraph>
-            <Txt typography="t7" color={COLORS.sub}>
-              {description}
-            </Txt>
-          </ListHeader.DescriptionParagraph>
-        ) : undefined
-      }
-      style={styles.sectionHeader}
-    />
+    <View style={styles.sectionHeader}>
+      <ListHeader
+        title={
+          <ListHeader.TitleParagraph typography="t7" fontWeight="bold" color={COLORS.subDark}>
+            {title}
+          </ListHeader.TitleParagraph>
+        }
+        lower={
+          description ? (
+            <ListHeader.DescriptionParagraph>
+              <Txt typography="t7" color={COLORS.sub}>
+                {description}
+              </Txt>
+            </ListHeader.DescriptionParagraph>
+          ) : undefined
+        }
+      />
+    </View>
   );
 }
 

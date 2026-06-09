@@ -1,21 +1,20 @@
 import { Accuracy, useGeolocation } from '@apps-in-toss/framework';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
-  Switch,
-  Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
+import { Button, ListRow, Switch, TextButton, Txt } from '@toss/tds-react-native';
 import { LocationSearch } from '../src/components/LocationSearch';
 import { COLORS } from '../src/components/RelayCard';
+import { BackLink, Card, Chip, SectionHeader } from '../src/components/ui';
 import { useAuth } from '../src/auth/AuthContext';
 import { useLocations } from '../src/hooks/useLocations';
+import { sharedStyles, RADIUS } from '../src/theme';
 import {
   deleteLocation,
   fetchRelay,
@@ -300,205 +299,251 @@ export default function SettingsScreen() {
     }
   };
 
-  const goBack = () => {
-    navigation.navigate('/');
-  };
-
   return (
     <ScrollView
       ref={scrollRef}
-      style={styles.container}
-      contentContainerStyle={styles.content}
+      style={sharedStyles.screen}
+      contentContainerStyle={sharedStyles.content}
     >
-      <TouchableOpacity onPress={goBack}>
-        <Text style={styles.back}>← 돌아가기</Text>
-      </TouchableOpacity>
-      <Text style={styles.title}>설정</Text>
+      <BackLink onPress={() => navigation.navigate('/')} />
+      <Txt typography="t2" fontWeight="bold" color={COLORS.text} style={styles.title}>
+        설정
+      </Txt>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>강수 알림</Text>
-        <Switch value={notify} onValueChange={onNotifyToggle} />
-      </View>
+      <Card style={styles.notifyCard}>
+        <ListRow
+          contents={
+            <ListRow.Texts type="1RowTypeA" top="강수 알림" topProps={{ fontWeight: 'semibold' }} />
+          }
+          right={<Switch checked={notify} onCheckedChange={onNotifyToggle} />}
+          verticalPadding="small"
+        />
+      </Card>
 
       {userKey ? (
-        <>
-          <TouchableOpacity
-            style={[styles.testPushBtn, pushTesting && styles.testPushBtnDisabled]}
+        <View style={styles.testRow}>
+          <Button
+            size="medium"
+            style="weak"
+            type="primary"
+            display="block"
+            disabled={pushTesting}
+            loading={pushTesting}
             onPress={() => onTestPush('rain')}
-            disabled={pushTesting}
+            viewStyle={styles.testBtn}
           >
-            <Text style={styles.testPushBtnText}>
-              {pushTesting ? '테스트 발송 중…' : '비 예고 테스트'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.testPushBtn, pushTesting && styles.testPushBtnDisabled]}
+            비 예고 테스트
+          </Button>
+          <Button
+            size="medium"
+            style="weak"
+            type="primary"
+            display="block"
+            disabled={pushTesting}
             onPress={() => onTestPush('clear')}
-            disabled={pushTesting}
+            viewStyle={styles.testBtn}
           >
-            <Text style={styles.testPushBtnText}>비 그침 테스트</Text>
-          </TouchableOpacity>
-        </>
+            비 그침 테스트
+          </Button>
+        </View>
       ) : null}
 
-      <Text style={styles.section}>알림 시점</Text>
-      <Text style={styles.sectionHint}>선택 위치 기준 강수 가능성</Text>
+      <SectionHeader title="알림 시점" description="선택 위치 기준 강수 가능성" />
       <View style={styles.chipRow}>
         {([30, 60] as const).map((m) => (
-          <TouchableOpacity
+          <Chip
             key={m}
-            style={[styles.chip, beforeMin === m && styles.chipActive]}
+            label={chipLabel(m)}
+            active={beforeMin === m}
             onPress={() => setBeforeMin(m)}
-          >
-            <Text style={[styles.chipText, beforeMin === m && styles.chipTextActive]}>
-              {chipLabel(m)}
-            </Text>
-          </TouchableOpacity>
+          />
         ))}
       </View>
 
-      <Text style={styles.section}>즐겨찾기 추가</Text>
-      <Text style={styles.sectionHint}>주소를 검색해 선택한 뒤, 저장할 이름을 입력하세요</Text>
+      <SectionHeader
+        title="즐겨찾기 추가"
+        description="주소를 검색해 선택한 뒤, 저장할 이름을 입력하세요"
+      />
 
-      <View style={styles.savePanel}>
-        <Text style={styles.nameLabel}>주소 검색</Text>
+      <Card>
+        <Txt typography="t7" fontWeight="semibold" color={COLORS.subDark} style={styles.fieldLabel}>
+          주소 검색
+        </Txt>
         <LocationSearch placeholder="지역 검색 (예: 강남역, 해운대)" onSelect={onSelectPlace} />
 
         <View style={styles.orRow}>
           <View style={styles.orLine} />
-          <Text style={styles.orText}>또는</Text>
+          <Txt typography="t7" fontWeight="semibold" color={COLORS.sub}>
+            또는
+          </Txt>
           <View style={styles.orLine} />
         </View>
 
-        <TouchableOpacity
-          style={[styles.gpsBtn, geoLoading && styles.gpsBtnDisabled]}
-          onPress={onUseCurrentLocation}
+        <Button
+          size="medium"
+          style="weak"
+          type="primary"
+          display="block"
           disabled={geoLoading}
+          loading={geoLoading}
+          onPress={onUseCurrentLocation}
         >
-          {geoLoading ? (
-            <ActivityIndicator color={COLORS.primary} />
-          ) : (
-            <Text style={styles.gpsBtnText}>현재 위치 사용</Text>
-          )}
-        </TouchableOpacity>
+          현재 위치 사용
+        </Button>
 
-        <View style={styles.panelDivider} />
+        <View style={styles.divider} />
 
-        <Text style={styles.selectedLabel}>선택된 주소</Text>
-        <Text style={[styles.selectedAddress, !selectedPlace && styles.selectedPlaceholder]}>
+        <Txt typography="t7" fontWeight="semibold" color={COLORS.sub} style={styles.fieldLabel}>
+          선택된 주소
+        </Txt>
+        <Txt
+          typography="t5"
+          color={selectedPlace ? COLORS.text : COLORS.sub}
+          style={styles.selectedAddress}
+        >
           {selectedPlace?.address ?? '검색 결과를 선택하면 주소가 표시됩니다'}
-        </Text>
+        </Txt>
 
-        <Text style={styles.nameLabel}>저장할 이름</Text>
+        <Txt typography="t7" fontWeight="semibold" color={COLORS.subDark} style={styles.fieldLabel}>
+          저장할 이름
+        </Txt>
         <View style={styles.presetRow}>
           {NAME_PRESETS.map((preset) => (
-            <TouchableOpacity
+            <Chip
               key={preset}
-              style={[styles.presetChip, name === preset && styles.presetChipActive]}
+              label={preset}
+              active={name === preset}
               onPress={() => setName(preset)}
-            >
-              <Text style={[styles.presetText, name === preset && styles.presetTextActive]}>
-                {preset}
-              </Text>
-            </TouchableOpacity>
+              compact
+            />
           ))}
         </View>
         <TextInput
           style={styles.input}
           placeholder="예: 학교, 할머니 댁"
+          placeholderTextColor={COLORS.sub}
           value={name}
           onChangeText={setName}
         />
 
-        <TouchableOpacity
-          style={[
-            styles.addBtn,
-            (!selectedPlace || !name.trim() || saving) && styles.btnDisabled,
-          ]}
-          onPress={onAdd}
+        <Button
+          display="block"
           disabled={!selectedPlace || !name.trim() || saving}
+          loading={saving}
+          onPress={onAdd}
+          viewStyle={styles.submitBtn}
         >
-          <Text style={styles.addBtnText}>{saving ? '저장 중…' : '위치 저장'}</Text>
-        </TouchableOpacity>
+          위치 저장
+        </Button>
         {selectedPlace ? (
-          <TouchableOpacity style={styles.cancelBtn} onPress={clearAddForm}>
-            <Text style={styles.cancelBtnText}>선택 취소</Text>
-          </TouchableOpacity>
+          <TextButton
+            typography="t6"
+            fontWeight="semibold"
+            color={COLORS.sub}
+            onPress={clearAddForm}
+            style={styles.cancelBtn}
+          >
+            선택 취소
+          </TextButton>
         ) : null}
-      </View>
+      </Card>
 
       {saved.length > 0 && (
         <>
-          <Text style={styles.section}>등록된 위치</Text>
+          <SectionHeader title="등록된 위치" />
           {saved.map((loc) => (
             <View key={loc.id}>
               {editingId === loc.id && editPlace ? (
-                <View style={styles.editPanel}>
-                  <Text style={styles.editTitle}>위치 수정</Text>
+                <Card style={styles.editPanel}>
+                  <Txt typography="t5" fontWeight="bold" color={COLORS.text} style={styles.editTitle}>
+                    위치 수정
+                  </Txt>
 
-                  <Text style={styles.nameLabel}>저장할 이름</Text>
+                  <Txt typography="t7" fontWeight="semibold" color={COLORS.subDark} style={styles.fieldLabel}>
+                    저장할 이름
+                  </Txt>
                   <View style={styles.presetRow}>
                     {NAME_PRESETS.map((preset) => (
-                      <TouchableOpacity
+                      <Chip
                         key={preset}
-                        style={[styles.presetChip, editName === preset && styles.presetChipActive]}
+                        label={preset}
+                        active={editName === preset}
                         onPress={() => setEditName(preset)}
-                      >
-                        <Text
-                          style={[
-                            styles.presetText,
-                            editName === preset && styles.presetTextActive,
-                          ]}
-                        >
-                          {preset}
-                        </Text>
-                      </TouchableOpacity>
+                        compact
+                      />
                     ))}
                   </View>
                   <TextInput
                     style={styles.input}
                     placeholder="예: 학교, 할머니 댁"
+                    placeholderTextColor={COLORS.sub}
                     value={editName}
                     onChangeText={setEditName}
                   />
 
-                  <Text style={styles.nameLabel}>주소 검색으로 변경</Text>
+                  <Txt typography="t7" fontWeight="semibold" color={COLORS.subDark} style={styles.fieldLabel}>
+                    주소 검색으로 변경
+                  </Txt>
                   <LocationSearch
                     placeholder="새 주소 검색 (예: 부산 해운대)"
                     onSelect={(place) => setEditPlace(place)}
                   />
-                  <Text style={styles.editCurrentAddress}>
+                  <Txt typography="t7" color={COLORS.sub} style={styles.editAddress}>
                     선택된 주소: {editPlace.address || '주소 확인 중…'}
-                  </Text>
+                  </Txt>
 
-                  <TouchableOpacity
-                    style={[styles.addBtn, saving && styles.btnDisabled]}
-                    onPress={onSaveEdit}
+                  <Button
+                    display="block"
                     disabled={saving}
+                    loading={saving}
+                    onPress={onSaveEdit}
+                    viewStyle={styles.submitBtn}
                   >
-                    <Text style={styles.addBtnText}>{saving ? '저장 중…' : '변경 저장'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={cancelEdit}>
-                    <Text style={styles.cancelBtnText}>취소</Text>
-                  </TouchableOpacity>
-                </View>
+                    변경 저장
+                  </Button>
+                  <TextButton
+                    typography="t6"
+                    fontWeight="semibold"
+                    color={COLORS.sub}
+                    onPress={cancelEdit}
+                    style={styles.cancelBtn}
+                  >
+                    취소
+                  </TextButton>
+                </Card>
               ) : (
-                <View style={styles.locRow}>
-                  <View style={styles.locInfo}>
-                    <Text style={styles.locName}>{loc.name}</Text>
-                    <Text style={styles.locCoord} numberOfLines={2}>
-                      {loc.address ?? addressById[loc.id] ?? '주소 확인 중…'}
-                    </Text>
-                  </View>
-                  <View style={styles.locActions}>
-                    <TouchableOpacity onPress={() => startEdit(loc)}>
-                      <Text style={styles.edit}>수정</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => onDelete(loc)}>
-                      <Text style={styles.delete}>삭제</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                <Card style={styles.locCard}>
+                  <ListRow
+                    contents={
+                      <ListRow.Texts
+                        type="2RowTypeA"
+                        top={loc.name}
+                        bottom={loc.address ?? addressById[loc.id] ?? '주소 확인 중…'}
+                      />
+                    }
+                    right={
+                      <View style={styles.locActions}>
+                        <TextButton
+                          typography="t7"
+                          fontWeight="semibold"
+                          color={COLORS.primary}
+                          onPress={() => startEdit(loc)}
+                        >
+                          수정
+                        </TextButton>
+                        <TextButton
+                          typography="t7"
+                          fontWeight="semibold"
+                          color={COLORS.danger}
+                          onPress={() => onDelete(loc)}
+                        >
+                          삭제
+                        </TextButton>
+                      </View>
+                    }
+                    verticalPadding="small"
+                  />
+                </Card>
               )}
             </View>
           ))}
@@ -509,155 +554,50 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: 20, paddingBottom: 40 },
-  back: { color: COLORS.primary, marginBottom: 12, fontWeight: '600' },
-  title: { fontSize: 24, fontWeight: '800', color: COLORS.text, marginBottom: 24 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  label: { fontSize: 16, color: COLORS.text, fontWeight: '600' },
-  testPushBtn: {
-    backgroundColor: '#EEF4FB',
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  testPushBtnDisabled: { opacity: 0.6 },
-  testPushBtnText: { color: COLORS.primary, fontWeight: '700' },
-  section: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.sub,
-    marginTop: 16,
-    marginBottom: 4,
-  },
-  sectionHint: {
-    fontSize: 12,
-    color: COLORS.sub,
-    marginBottom: 8,
-  },
+  title: { marginBottom: 20 },
+  notifyCard: { paddingVertical: 4, paddingHorizontal: 0, marginBottom: 12 },
+  testRow: { gap: 8, marginBottom: 8 },
+  testBtn: { flex: 1 },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#E8EEF4',
-  },
-  chipActive: { backgroundColor: COLORS.primary },
-  chipText: { color: COLORS.sub, fontWeight: '600', fontSize: 14 },
-  chipTextActive: { color: '#fff' },
+  fieldLabel: { marginBottom: 8 },
   orRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 12,
-    gap: 10,
+    marginVertical: 16,
+    gap: 12,
   },
-  orLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
-  orText: { fontSize: 12, color: COLORS.sub, fontWeight: '600' },
-  panelDivider: { height: 1, backgroundColor: '#EEF2F6', marginVertical: 16 },
-  selectedPlaceholder: { color: COLORS.sub, fontStyle: 'italic' },
-  gpsBtn: {
-    backgroundColor: '#EEF4FB',
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  gpsBtnDisabled: { opacity: 0.7 },
-  gpsBtnText: { color: COLORS.primary, fontWeight: '700' },
-  savePanel: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-  },
-  editPanel: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  editTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 12 },
-  selectedLabel: { fontSize: 12, color: COLORS.sub, marginBottom: 4 },
-  selectedAddress: { fontSize: 15, color: COLORS.text, lineHeight: 22, marginBottom: 16 },
-  nameLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 8,
-  },
+  orLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 20 },
+  selectedAddress: { lineHeight: 24, marginBottom: 20 },
   presetRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 10,
-  },
-  presetChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: '#E8EEF4',
-  },
-  presetChipActive: { backgroundColor: COLORS.primary },
-  presetText: { color: COLORS.sub, fontWeight: '600', fontSize: 14 },
-  presetTextActive: { color: '#fff' },
-  input: {
-    backgroundColor: '#F7F9FC',
-    borderRadius: 10,
-    padding: 14,
     marginBottom: 12,
+  },
+  input: {
+    backgroundColor: COLORS.bg,
+    borderRadius: RADIUS.sm,
+    padding: 14,
+    marginBottom: 16,
     fontSize: 16,
+    color: COLORS.text,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: COLORS.border,
   },
-  editCurrentAddress: {
-    fontSize: 13,
-    color: COLORS.sub,
+  submitBtn: { marginTop: 4 },
+  cancelBtn: { alignSelf: 'center', marginTop: 8 },
+  editPanel: {
     marginBottom: 8,
-    lineHeight: 18,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
   },
-  addBtn: {
-    backgroundColor: COLORS.primary,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  btnDisabled: { opacity: 0.6 },
-  cancelBtn: {
-    padding: 12,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  cancelBtnText: { color: COLORS.sub, fontWeight: '600' },
-  locRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  locInfo: { flex: 1, paddingRight: 12 },
-  locName: { fontWeight: '700', color: COLORS.text },
-  locCoord: { fontSize: 12, color: COLORS.sub, marginTop: 2 },
-  locActions: { flexDirection: 'row', gap: 16 },
-  edit: { color: COLORS.primary, fontWeight: '600' },
-  delete: { color: '#E53E3E', fontWeight: '600' },
+  editTitle: { marginBottom: 16 },
+  editAddress: { marginBottom: 16, lineHeight: 20 },
+  locCard: { paddingVertical: 0, paddingHorizontal: 0, marginBottom: 8 },
+  locActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
 });
