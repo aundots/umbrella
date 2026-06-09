@@ -1,7 +1,10 @@
 node_modules/
 dist/
 .env
+server/.env
 server/data/
+server/mtls/
+mTLS*.zip
 *.ait
 .DS_Store
 .vercel

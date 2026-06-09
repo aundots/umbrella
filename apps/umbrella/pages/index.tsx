@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
+import { useAuth } from '../src/auth/AuthContext';
 import { COLORS, MetaLine, RelayCard } from '../src/components/RelayCard';
 import { LocationSearch } from '../src/components/LocationSearch';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
@@ -20,6 +21,7 @@ import {
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const { userKey, loading: authLoading, error: authError, login } = useAuth();
   const { locations, active, activeId, activeAddress, setActiveId, addSearchedPlace } =
     useLocations();
   const { report, loading, error, reload } = useRelay(active);
@@ -30,6 +32,27 @@ export default function HomeScreen() {
       : report?.relayStatus === 'approaching'
         ? COLORS.approaching
         : COLORS.clear;
+
+  if (authLoading && !userKey) {
+    return (
+      <View style={styles.authGate}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.authGateText}>토스 로그인 연결 중…</Text>
+      </View>
+    );
+  }
+
+  if (!userKey) {
+    return (
+      <View style={styles.authGate}>
+        <Text style={styles.authGateTitle}>토스 로그인이 필요해요</Text>
+        <Text style={styles.authGateText}>{authError ?? '로그인 후 이용해 주세요.'}</Text>
+        <TouchableOpacity style={styles.loginBtn} onPress={login}>
+          <Text style={styles.loginBtnText}>토스로 로그인</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -177,4 +200,21 @@ const styles = StyleSheet.create({
   errorText: { color: '#E53E3E', fontWeight: '600' },
   errorHint: { color: COLORS.sub, fontSize: 12, marginTop: 8 },
   retry: { color: COLORS.primary, marginTop: 12, fontWeight: '600' },
+  authGate: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  authGateTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
+  authGateText: { fontSize: 14, color: COLORS.sub, textAlign: 'center', marginTop: 8 },
+  loginBtn: {
+    marginTop: 20,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  loginBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

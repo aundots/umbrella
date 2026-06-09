@@ -3,6 +3,8 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { listLocations } from '../db/store.js';
 import { buildLiveRelayReport } from '../engine/liveRelay.js';
+import { isMtlsConfigured } from '../toss/mtls.js';
+import { sendFunctionalMessage } from '../toss/messenger.js';
 
 const sent = new Map<string, number>();
 const COOLDOWN_MS = 30 * 60 * 1000;
@@ -17,7 +19,40 @@ function listAllUserKeys(): string[] {
   return [...new Set(data.locations.map((l) => l.userKey))];
 }
 
-/** MVP: 조건 충족 시 콘솔 로그. 토스 mTLS 푸시는 템플릿 승인 후 연동 */
+function isTossUserKey(userKey: string): boolean {
+  return /^\d+$/.test(userKey);
+}
+
+function buildPushContext(locName: string, report: Awaited<ReturnType<typeof buildLiveRelayReport>>) {
+  return {
+    location: locName,
+    minutes: String(report.arrival.inMinutes ?? 0),
+    status: report.relayStatus,
+  };
+}
+
+async function trySendPush(
+  userKey: string,
+  locName: string,
+  report: Awaited<ReturnType<typeof buildLiveRelayReport>>,
+): Promise<void> {
+  const templateCode = process.env.TOSS_PUSH_TEMPLATE_CODE;
+  if (!isMtlsConfigured() || !templateCode || !isTossUserKey(userKey)) return;
+
+  const { status, data } = await sendFunctionalMessage({
+    userKey,
+    templateSetCode: templateCode,
+    context: buildPushContext(locName, report),
+  });
+
+  if (data.resultType === 'SUCCESS') {
+    console.log(`[NOTIFY] push sent user=${userKey} loc=${locName}`);
+    return;
+  }
+
+  console.warn(`[NOTIFY] push failed user=${userKey} status=${status}`, data.error);
+}
+
 export async function runNotifyScan(): Promise<void> {
   for (const userKey of listAllUserKeys()) {
     const locations = listLocations(userKey).filter((l) => l.notifyEnabled);
@@ -46,6 +81,8 @@ export async function runNotifyScan(): Promise<void> {
           `[NOTIFY] user=${userKey} [${loc.name}] ${report.relayStatus} ` +
             `in=${report.arrival.inMinutes ?? 0}min peak=${report.arrival.peakRateMmH}mm/h`,
         );
+
+        await trySendPush(userKey, loc.name, report);
       } catch (e) {
         console.error(`[NOTIFY] ${loc.name}`, e);
       }

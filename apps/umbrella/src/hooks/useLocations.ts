@@ -1,6 +1,6 @@
 import { Accuracy, useGeolocation } from '@apps-in-toss/framework';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { USER_KEY } from '../config';
+import { useAuth } from '../auth/AuthContext';
 import {
   fetchLocations,
   fetchRelay,
@@ -12,7 +12,7 @@ import { GeocodePlace, reverseGeocode } from '../services/geocode';
 
 const FALLBACK_CURRENT: SavedLocation = {
   id: 'current',
-  userKey: USER_KEY,
+  userKey: 'current',
   name: '현재',
   lat: 37.5665,
   lng: 126.978,
@@ -24,10 +24,10 @@ function sessionId(lat: number, lng: number): string {
   return `session-${lat.toFixed(4)}-${lng.toFixed(4)}`;
 }
 
-function placeToSessionLocation(place: GeocodePlace): SavedLocation {
+function placeToSessionLocation(place: GeocodePlace, userKey: string): SavedLocation {
   return {
     id: sessionId(place.lat, place.lng),
-    userKey: USER_KEY,
+    userKey,
     name: place.name,
     address: place.address,
     lat: place.lat,
@@ -55,6 +55,7 @@ export function useCurrentCoords() {
 }
 
 export function useLocations() {
+  const { userKey } = useAuth();
   const coords = useCurrentCoords();
   const [saved, setSaved] = useState<SavedLocation[]>([]);
   const [sessionPlaces, setSessionPlaces] = useState<SavedLocation[]>([]);
@@ -77,14 +78,15 @@ export function useLocations() {
   );
 
   const reload = useCallback(async () => {
+    if (!userKey) return;
     try {
-      await registerUser(USER_KEY, true);
-      const list = await fetchLocations(USER_KEY);
+      await registerUser(userKey, true);
+      const list = await fetchLocations(userKey);
       setSaved(list);
     } catch {
       setSaved([]);
     }
-  }, []);
+  }, [userKey]);
 
   useEffect(() => {
     reload();
@@ -105,13 +107,14 @@ export function useLocations() {
   }, [coords.lat, coords.lng]);
 
   const addSearchedPlace = useCallback((place: GeocodePlace) => {
-    const loc = placeToSessionLocation(place);
+    if (!userKey) return;
+    const loc = placeToSessionLocation(place, userKey);
     setSessionPlaces((prev) => {
       const filtered = prev.filter((item) => item.id !== loc.id);
       return [loc, ...filtered].slice(0, 8);
     });
     setActiveId(loc.id);
-  }, []);
+  }, [userKey]);
 
   const active = locations.find((l) => l.id === activeId) ?? current;
 

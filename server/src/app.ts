@@ -11,14 +11,21 @@ import { buildLiveRelayReport } from './engine/liveRelay.js';
 import { getCached, setCache } from './kma/cache.js';
 import { registerLegalRoutes } from './routes/legal.js';
 import { registerGeocodeRoutes } from './routes/geocode.js';
+import { registerTossRoutes } from './routes/toss.js';
+import { isMtlsConfigured } from './toss/mtls.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
   await app.register(cors, { origin: true });
   registerLegalRoutes(app);
   registerGeocodeRoutes(app);
+  registerTossRoutes(app);
 
-  app.get('/health', async () => ({ ok: true, service: 'umbrella-server' }));
+  app.get('/health', async () => ({
+    ok: true,
+    service: 'umbrella-server',
+    mtls: isMtlsConfigured(),
+  }));
 
   app.get<{ Querystring: { lat: string; lng: string; name?: string } }>(
     '/relay',

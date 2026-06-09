@@ -13,7 +13,7 @@ import {
 import { useNavigation } from '@granite-js/react-native';
 import { LocationSearch } from '../src/components/LocationSearch';
 import { COLORS } from '../src/components/RelayCard';
-import { USER_KEY } from '../src/config';
+import { useAuth } from '../src/auth/AuthContext';
 import { useLocations } from '../src/hooks/useLocations';
 import {
   deleteLocation,
@@ -25,6 +25,7 @@ import { GeocodePlace } from '../src/services/geocode';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
+  const { userKey, loading: authLoading, error: authError, login } = useAuth();
   const { locations, reload } = useLocations();
   const geo = useGeolocation({
     accuracy: Accuracy.Balanced,
@@ -37,8 +38,8 @@ export default function SettingsScreen() {
   const [selectedPlace, setSelectedPlace] = useState<GeocodePlace | null>(null);
 
   useEffect(() => {
-    registerUser(USER_KEY, notify);
-  }, [notify]);
+    if (userKey) registerUser(userKey, notify);
+  }, [notify, userKey]);
 
   const saved = locations.filter((l) => l.id !== 'current' && !l.id.startsWith('session-'));
 
@@ -71,7 +72,11 @@ export default function SettingsScreen() {
       return;
     }
     try {
-      await saveLocation(USER_KEY, {
+      if (!userKey) {
+        Alert.alert('로그인 필요', '토스 로그인 후 저장할 수 있어요.');
+        return;
+      }
+      await saveLocation(userKey, {
         name: name.trim(),
         lat: selectedPlace.lat,
         lng: selectedPlace.lng,
@@ -88,7 +93,8 @@ export default function SettingsScreen() {
   };
 
   const onDelete = async (loc: SavedLocation) => {
-    await deleteLocation(USER_KEY, loc.id);
+    if (!userKey) return;
+    await deleteLocation(userKey, loc.id);
     await reload();
   };
 
@@ -102,6 +108,22 @@ export default function SettingsScreen() {
         <Text style={styles.back}>← 돌아가기</Text>
       </TouchableOpacity>
       <Text style={styles.title}>설정</Text>
+
+      <View style={styles.authBox}>
+        <Text style={styles.authLabel}>토스 로그인</Text>
+        {authLoading ? (
+          <Text style={styles.authValue}>연결 중…</Text>
+        ) : userKey ? (
+          <Text style={styles.authValue}>연결됨 · userKey {userKey}</Text>
+        ) : (
+          <Text style={styles.authValue}>{authError ?? '로그인이 필요해요'}</Text>
+        )}
+        {!userKey ? (
+          <TouchableOpacity style={styles.loginBtn} onPress={login}>
+            <Text style={styles.loginBtnText}>토스로 로그인</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
 
       <View style={styles.row}>
         <Text style={styles.label}>강수 알림</Text>
@@ -175,6 +197,22 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 40 },
   back: { color: COLORS.primary, marginBottom: 12, fontWeight: '600' },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.text, marginBottom: 24 },
+  authBox: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  authLabel: { fontSize: 12, color: COLORS.sub, marginBottom: 4 },
+  authValue: { fontSize: 14, color: COLORS.text, lineHeight: 20 },
+  loginBtn: {
+    marginTop: 12,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  loginBtnText: { color: '#fff', fontWeight: '700' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

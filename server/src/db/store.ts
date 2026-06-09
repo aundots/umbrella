@@ -92,3 +92,10 @@ export function deleteLocation(userKey: string, id: string): boolean {
 export function getLocation(userKey: string, id: string): SavedLocation | null {
   return load().locations.find((l) => l.id === id && l.userKey === userKey) ?? null;
 }
+
+export function deleteUserData(userKey: string): void {
+  const db = load();
+  db.users = db.users.filter((u) => u.userKey !== userKey);
+  db.locations = db.locations.filter((l) => l.userKey !== userKey);
+  save(db);
+}
