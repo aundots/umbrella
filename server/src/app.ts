@@ -15,6 +15,7 @@ import { registerGeocodeRoutes } from './routes/geocode.js';
 import { registerForecastRoutes } from './routes/forecast.js';
 import { registerTossRoutes } from './routes/toss.js';
 import { persistenceMode } from './db/persistence.js';
+import { isApihubConfigured } from './kma/apihub.js';
 import { isMtlsConfigured } from './toss/mtls.js';
 
 export async function buildApp() {
@@ -31,6 +32,10 @@ export async function buildApp() {
     service: 'umbrella-server',
     mtls: isMtlsConfigured(),
     db: persistenceMode(),
+    nowcast: {
+      hsr: 'WthrRadarInfoService (DATA_GO_KR_SERVICE_KEY)',
+      maple: isApihubConfigured() ? 'apihub' : 'needs KMA_APIHUB_AUTH_KEY',
+    },
   }));
 
   app.get<{ Querystring: { lat: string; lng: string; name?: string } }>(

@@ -6,6 +6,13 @@ import {
 import { buildForecastDetail } from '../kma/forecastDetail.js';
 import { FcstSlot, ForecastDetail, PrecipType } from '../kma/types.js';
 import {
+  analyzeNowcastArrival,
+  loadNowcastContext,
+  mergeTimelineWithNowcast,
+  nowcastConfidenceBoost,
+  resolveDataSource,
+} from './nowcastBlend.js';
+import {
   applyTerrainAdjust,
   computeTerrainContext,
   getWindFromFcst,
@@ -123,13 +130,21 @@ export async function buildLiveRelayReport(params: {
   lng: number;
 }): Promise<LiveRelayReport> {
   const now = new Date();
-  const { nx, ny, ncst, fcst } = await fetchLocationWeather(params.lat, params.lng);
+  const [{ nx, ny, ncst, fcst }, nowcast] = await Promise.all([
+    fetchLocationWeather(params.lat, params.lng),
+    loadNowcastContext(params.lat, params.lng),
+  ]);
 
-  const currentType = ncstPrecipType(ncst);
-  const currentRate = rn1ToRateMmH(ncstRn1(ncst));
-  const precipNow = isPrecipitating(currentType) || currentRate > 0;
+  let currentType = ncstPrecipType(ncst);
+  let currentRate = rn1ToRateMmH(ncstRn1(ncst));
+  if (nowcast.hsrRateMmH != null) {
+    currentRate = Math.max(currentRate, nowcast.hsrRateMmH);
+    if (nowcast.hsrRateMmH > 0.05) currentType = 'rain';
+  }
+  const precipNow = isPrecipitating(currentType) || currentRate > 0.05;
 
   const { arrivalSlot, endSlot, peakRate } = analyzeFcst(now, fcst, currentType);
+  const mapleArrival = analyzeNowcastArrival(now, nowcast, precipNow);
 
   let inMinutes: number | null = null;
   let arrivalType: PrecipType | null = null;
@@ -140,6 +155,14 @@ export async function buildLiveRelayReport(params: {
     arrivalType = arrivalSlot.pty;
     willArrive = inMinutes <= 60;
   }
+  if (mapleArrival.willArrive && mapleArrival.inMinutes != null) {
+    if (inMinutes == null || mapleArrival.inMinutes < inMinutes) {
+      inMinutes = mapleArrival.inMinutes;
+      arrivalType = 'rain';
+      willArrive = true;
+    }
+  }
+  const blendedPeak = Math.max(peakRate, mapleArrival.peakRate, currentRate);
 
   let endAt: Date | null = endSlot;
   if (precipNow && !endAt) {
@@ -152,7 +175,7 @@ export async function buildLiveRelayReport(params: {
 
   const adjusted = applyTerrainAdjust(
     terrain,
-    Math.max(peakRate, currentRate),
+    blendedPeak,
     inMinutes,
     endAt,
     willArrive,
@@ -162,7 +185,11 @@ export async function buildLiveRelayReport(params: {
   if (precipNow) relayStatus = 'live';
   else if (adjusted.willArrive) relayStatus = 'approaching';
 
-  const confidence = computeConfidence(currentType, fcst, adjusted.confidenceDelta);
+  const confidence = Math.min(
+    95,
+    computeConfidence(currentType, fcst, adjusted.confidenceDelta) +
+      nowcastConfidenceBoost(nowcast),
+  );
 
   let detail: ForecastDetail | undefined;
   try {
@@ -194,12 +221,12 @@ export async function buildLiveRelayReport(params: {
     confidence,
     relayStatus,
     spatial: {
-      resolutionM: 500,
+      resolutionM: nowcast.hsrAvailable ? 500 : 1000,
       awsDistanceM: null,
-      dataSource: 'fcst',
+      dataSource: resolveDataSource(nowcast),
     },
     terrain,
-    timeline: buildTimeline(now, fcst),
+    timeline: mergeTimelineWithNowcast(buildTimeline(now, fcst), nowcast),
     detail,
   };
 }

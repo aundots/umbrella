@@ -10,7 +10,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@apps-in-toss/framework": "2.4.1",
+    "@apps-in-toss/framework": "2.6.1",
     "@granite-js/native": "1.0.4",
     "@granite-js/react-native": "1.0.4",
     "@toss/tds-react-native": "2.0.2",

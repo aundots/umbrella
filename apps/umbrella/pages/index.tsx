@@ -16,6 +16,7 @@ import { COLORS, MetaLine, RelayCard } from '../src/components/RelayCard';
 import { LocationSearch } from '../src/components/LocationSearch';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
 import {
+  dataSourceLabel,
   formatTime,
   precipLabel,
   statusLabel,
@@ -129,7 +130,9 @@ export default function HomeScreen() {
                 ) : (
                   <Text style={styles.value}>강수 없음</Text>
                 )}
-                <MetaLine text={`${formatTime(report.observedAt)} 관측 · 500m 구역 기준`} />
+                <MetaLine
+                  text={`${formatTime(report.observedAt)} 관측 · ${report.spatial.resolutionM}m · ${dataSourceLabel(report.spatial.dataSource)}`}
+                />
                 {report.detail?.nowObs?.tempC != null && (
                   <Text style={styles.value}>
                     기온 {report.detail.nowObs.tempC}°C

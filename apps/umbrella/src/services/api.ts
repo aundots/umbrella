@@ -29,7 +29,7 @@ export interface LiveRelayReport {
   spatial: {
     resolutionM: number;
     awsDistanceM: number | null;
-    dataSource: string;
+    dataSource: 'aws' | 'hsr' | 'blended' | 'fcst';
   };
   terrain: {
     elevationM: number;
@@ -235,6 +235,19 @@ export function precipLabel(type: string | null): string {
       return '비/눈';
     default:
       return '없음';
+  }
+}
+
+export function dataSourceLabel(source: LiveRelayReport['spatial']['dataSource']): string {
+  switch (source) {
+    case 'blended':
+      return 'HSR+MAPLE+초단기';
+    case 'hsr':
+      return 'HSR 500m';
+    case 'aws':
+      return 'AWS';
+    default:
+      return '초단기예보';
   }
 }
 

@@ -27,6 +27,7 @@ import {
   sendTestPush,
 } from '../src/services/api';
 import { GeocodePlace, reverseGeocode } from '../src/services/geocode';
+import { requestRainNotificationAgreement } from '../src/notify/agreement';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
@@ -55,6 +56,35 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (userKey) registerUser(userKey, notify);
   }, [notify, userKey]);
+
+  const onNotifyToggle = (next: boolean) => {
+    if (!next) {
+      setNotify(false);
+      return;
+    }
+    if (!userKey) {
+      Alert.alert('로그인 필요', '알림을 켜려면 토스 로그인이 필요해요.');
+      return;
+    }
+
+    requestRainNotificationAgreement((outcome) => {
+      if (outcome === 'agreed') {
+        setNotify(true);
+        return;
+      }
+      setNotify(false);
+      if (outcome === 'rejected') {
+        Alert.alert('알림 미동의', '강수 알림을 받으려면 동의가 필요해요.');
+      } else if (outcome === 'unsupported') {
+        Alert.alert(
+          '알림 동의 준비 중',
+          '앱 업데이트 후 알림 동의문이 표시돼요. 콘솔에 알림 동의문을 등록했는지 확인해 주세요.',
+        );
+      } else {
+        Alert.alert('오류', '알림 동의 요청에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      }
+    });
+  };
 
   useEffect(() => {
     if (!previewCoords) {
@@ -219,7 +249,7 @@ export default function SettingsScreen() {
 
       <View style={styles.row}>
         <Text style={styles.label}>강수 알림</Text>
-        <Switch value={notify} onValueChange={setNotify} />
+        <Switch value={notify} onValueChange={onNotifyToggle} />
       </View>
 
       {userKey ? (
