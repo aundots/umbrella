@@ -26,18 +26,53 @@ interface DbData {
 }
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const DATA_PATH = join(__dir, '../../data/db.json');
+const LOCAL_DATA_PATH = join(__dir, '../../data/db.json');
+const SERVERLESS_DATA_PATH = '/tmp/umbrella-db.json';
+
+let memoryDb: DbData = { users: [], locations: [] };
+
+function isServerless(): boolean {
+  return Boolean(process.env.VERCEL);
+}
+
+function dataPath(): string {
+  return isServerless() ? SERVERLESS_DATA_PATH : LOCAL_DATA_PATH;
+}
 
 function load(): DbData {
-  if (!existsSync(DATA_PATH)) {
+  if (isServerless()) {
+    const path = dataPath();
+    if (existsSync(path)) {
+      try {
+        memoryDb = JSON.parse(readFileSync(path, 'utf-8')) as DbData;
+      } catch {
+        memoryDb = { users: [], locations: [] };
+      }
+    }
+    return memoryDb;
+  }
+
+  const path = LOCAL_DATA_PATH;
+  if (!existsSync(path)) {
     return { users: [], locations: [] };
   }
-  return JSON.parse(readFileSync(DATA_PATH, 'utf-8')) as DbData;
+  return JSON.parse(readFileSync(path, 'utf-8')) as DbData;
 }
 
 function save(data: DbData): void {
-  mkdirSync(dirname(DATA_PATH), { recursive: true });
-  writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  memoryDb = data;
+
+  if (isServerless()) {
+    try {
+      writeFileSync(dataPath(), JSON.stringify(data, null, 2), 'utf-8');
+    } catch {
+      // warm instance keeps memoryDb; cold start resets (MVP)
+    }
+    return;
+  }
+
+  mkdirSync(dirname(LOCAL_DATA_PATH), { recursive: true });
+  writeFileSync(LOCAL_DATA_PATH, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 export function upsertUser(userKey: string, notifyConsent: boolean): UserRecord {

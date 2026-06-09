@@ -33,27 +33,6 @@ export default function HomeScreen() {
         ? COLORS.approaching
         : COLORS.clear;
 
-  if (authLoading && !userKey) {
-    return (
-      <View style={styles.authGate}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.authGateText}>토스 로그인 연결 중…</Text>
-      </View>
-    );
-  }
-
-  if (!userKey) {
-    return (
-      <View style={styles.authGate}>
-        <Text style={styles.authGateTitle}>토스 로그인이 필요해요</Text>
-        <Text style={styles.authGateText}>{authError ?? '로그인 후 이용해 주세요.'}</Text>
-        <TouchableOpacity style={styles.loginBtn} onPress={login}>
-          <Text style={styles.loginBtnText}>토스로 로그인</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.root}>
       <ScrollView
@@ -63,6 +42,13 @@ export default function HomeScreen() {
     >
       <Text style={styles.header}>우산챙겨</Text>
       <Text style={styles.subtitle}>비 언제 오고 언제 그치는지</Text>
+      {!userKey && !authLoading ? (
+        <TouchableOpacity style={styles.loginBanner} onPress={login}>
+          <Text style={styles.loginBannerText}>
+            {authError ? `${authError} · ` : ''}즐겨찾기·알림은 토스 로그인 후 이용
+          </Text>
+        </TouchableOpacity>
+      ) : null}
       <Text style={styles.address}>📍 {activeAddress}</Text>
 
       <LocationSearch
@@ -207,14 +193,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  authGateTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
-  authGateText: { fontSize: 14, color: COLORS.sub, textAlign: 'center', marginTop: 8 },
-  loginBtn: {
-    marginTop: 20,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
+  loginBanner: {
+    backgroundColor: '#EEF4FB',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
   },
-  loginBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  loginBannerText: { color: COLORS.primary, fontSize: 13, fontWeight: '600', textAlign: 'center' },
 });

@@ -82,11 +82,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (stored) {
           setUserKey(stored);
-          setLoading(false);
-          return;
         }
-
-        await login();
+        setLoading(false);
       } catch {
         if (!cancelled) setLoading(false);
       }
