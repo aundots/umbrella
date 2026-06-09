@@ -42,10 +42,24 @@ function emptyDb(): DbData {
   return { users: [], locations: [] };
 }
 
+function stripEnvQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 function redisConfig(): { url: string; token: string } | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL?.trim() ?? process.env.KV_REST_API_URL?.trim();
-  const token =
-    process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? process.env.KV_REST_API_TOKEN?.trim();
+  const rawUrl = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const rawToken = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  if (!rawUrl || !rawToken) return null;
+
+  const url = stripEnvQuotes(rawUrl);
+  const token = stripEnvQuotes(rawToken);
   if (!url || !token) return null;
   return { url, token };
 }
