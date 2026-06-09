@@ -1,6 +1,5 @@
 import { loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/framework';
-
-const TEST_AD_GROUP_ID = 'ait-ad-test-interstitial-id';
+import { INTERSTITIAL_AD_GROUP_ID } from '../config';
 
 let loaded = false;
 let loading = false;
@@ -13,7 +12,7 @@ export function preloadInterstitial(): void {
   loading = true;
   try {
     loadFullScreenAd({
-      options: { adGroupId: TEST_AD_GROUP_ID },
+      options: { adGroupId: INTERSTITIAL_AD_GROUP_ID },
       onEvent: (event) => {
         if (event.type === 'loaded') {
           loaded = true;
@@ -48,7 +47,7 @@ export function showInterstitial(onDone?: () => void): void {
 
   try {
     showFullScreenAd({
-      options: { adGroupId: TEST_AD_GROUP_ID },
+      options: { adGroupId: INTERSTITIAL_AD_GROUP_ID },
       onEvent: (event) => {
         if (event.type === 'dismissed' || event.type === 'failedToShow') {
           loaded = false;
