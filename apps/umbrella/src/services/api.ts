@@ -98,7 +98,7 @@ export async function sendTestPush(userKey: string): Promise<{ resultType?: stri
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       userKey,
-      context: { location: '테스트', minutes: '30', status: 'approaching' },
+      context: { name: '30분 후 테스트 비' },
     }),
   });
   const json = (await res.json()) as { resultType?: string; error?: { reason?: string }; message?: string };

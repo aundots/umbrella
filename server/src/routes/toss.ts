@@ -28,7 +28,12 @@ function getPushStatus() {
     templateConfigured: Boolean(templateCode),
     deploymentIdConfigured: Boolean(deploymentId),
     deploymentId: deploymentId ?? null,
-    templateVariables: ['location', 'minutes', 'status'],
+    templateVariables: ['name'],
+    templateExample: {
+      title: '강수알림',
+      body: '{name}',
+      sampleName: '30분 후 집 비',
+    },
     cronHint: 'GitHub Actions notify-cron.yml (5분마다)',
     missing,
   };
