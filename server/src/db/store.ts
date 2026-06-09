@@ -134,3 +134,17 @@ export function deleteUserData(userKey: string): void {
   db.locations = db.locations.filter((l) => l.userKey !== userKey);
   save(db);
 }
+
+export function listNotifyTargets(): Array<{ userKey: string; locations: SavedLocation[] }> {
+  const db = load();
+  const byUser = new Map<string, SavedLocation[]>();
+
+  for (const loc of db.locations) {
+    if (!loc.notifyEnabled) continue;
+    const list = byUser.get(loc.userKey) ?? [];
+    list.push(loc);
+    byUser.set(loc.userKey, list);
+  }
+
+  return [...byUser.entries()].map(([userKey, locations]) => ({ userKey, locations }));
+}

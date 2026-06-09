@@ -10,6 +10,7 @@ import {
 import { buildLiveRelayReport } from './engine/liveRelay.js';
 import { getCached, setCache } from './kma/cache.js';
 import { registerLegalRoutes } from './routes/legal.js';
+import { registerCronRoutes } from './routes/cron.js';
 import { registerGeocodeRoutes } from './routes/geocode.js';
 import { registerTossRoutes } from './routes/toss.js';
 import { isMtlsConfigured } from './toss/mtls.js';
@@ -20,6 +21,7 @@ export async function buildApp() {
   registerLegalRoutes(app);
   registerGeocodeRoutes(app);
   registerTossRoutes(app);
+  registerCronRoutes(app);
 
   app.get('/health', async () => ({
     ok: true,

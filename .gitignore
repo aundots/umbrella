@@ -3,6 +3,7 @@ dist/
 .env
 server/.env
 server/.mtls-vercel.env
+server/.cron-secret.tmp
 server/data/
 server/mtls/
 mTLS*.zip

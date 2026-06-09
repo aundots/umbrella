@@ -11,5 +11,11 @@
       "maxDuration": 30,
       "includeFiles": "server/public/**"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/cron/notify",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }

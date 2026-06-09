@@ -1,7 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { listLocations } from '../db/store.js';
+import { listNotifyTargets } from '../db/store.js';
 import { buildLiveRelayReport } from '../engine/liveRelay.js';
 import { isMtlsConfigured } from '../toss/mtls.js';
 import { sendFunctionalMessage } from '../toss/messenger.js';
@@ -9,14 +6,12 @@ import { sendFunctionalMessage } from '../toss/messenger.js';
 const sent = new Map<string, number>();
 const COOLDOWN_MS = 30 * 60 * 1000;
 
-const DB_PATH = join(dirname(fileURLToPath(import.meta.url)), '../../data/db.json');
-
-function listAllUserKeys(): string[] {
-  if (!existsSync(DB_PATH)) return [];
-  const data = JSON.parse(readFileSync(DB_PATH, 'utf-8')) as {
-    locations: Array<{ userKey: string }>;
-  };
-  return [...new Set(data.locations.map((l) => l.userKey))];
+export interface NotifyScanResult {
+  users: number;
+  locations: number;
+  triggered: number;
+  pushed: number;
+  skippedCooldown: number;
 }
 
 function isTossUserKey(userKey: string): boolean {
@@ -35,9 +30,9 @@ async function trySendPush(
   userKey: string,
   locName: string,
   report: Awaited<ReturnType<typeof buildLiveRelayReport>>,
-): Promise<void> {
+): Promise<boolean> {
   const templateCode = process.env.TOSS_PUSH_TEMPLATE_CODE;
-  if (!isMtlsConfigured() || !templateCode || !isTossUserKey(userKey)) return;
+  if (!isMtlsConfigured() || !templateCode || !isTossUserKey(userKey)) return false;
 
   const { status, data } = await sendFunctionalMessage({
     userKey,
@@ -47,15 +42,24 @@ async function trySendPush(
 
   if (data.resultType === 'SUCCESS') {
     console.log(`[NOTIFY] push sent user=${userKey} loc=${locName}`);
-    return;
+    return true;
   }
 
   console.warn(`[NOTIFY] push failed user=${userKey} status=${status}`, data.error);
+  return false;
 }
 
-export async function runNotifyScan(): Promise<void> {
-  for (const userKey of listAllUserKeys()) {
-    const locations = listLocations(userKey).filter((l) => l.notifyEnabled);
+export async function runNotifyScan(): Promise<NotifyScanResult> {
+  const targets = listNotifyTargets();
+  const result: NotifyScanResult = {
+    users: targets.length,
+    locations: targets.reduce((n, t) => n + t.locations.length, 0),
+    triggered: 0,
+    pushed: 0,
+    skippedCooldown: 0,
+  };
+
+  for (const { userKey, locations } of targets) {
     for (const loc of locations) {
       try {
         const report = await buildLiveRelayReport({
@@ -73,19 +77,27 @@ export async function runNotifyScan(): Promise<void> {
 
         if (!shouldNotify) continue;
 
-        const eventKey = `${loc.id}:${report.relayStatus}:${report.arrival.inMinutes ?? 'now'}`;
-        if (Date.now() - (sent.get(eventKey) ?? 0) < COOLDOWN_MS) continue;
+        const eventKey = `${userKey}:${loc.id}:${report.relayStatus}:${report.arrival.inMinutes ?? 'now'}`;
+        if (Date.now() - (sent.get(eventKey) ?? 0) < COOLDOWN_MS) {
+          result.skippedCooldown += 1;
+          continue;
+        }
 
         sent.set(eventKey, Date.now());
+        result.triggered += 1;
         console.log(
           `[NOTIFY] user=${userKey} [${loc.name}] ${report.relayStatus} ` +
             `in=${report.arrival.inMinutes ?? 0}min peak=${report.arrival.peakRateMmH}mm/h`,
         );
 
-        await trySendPush(userKey, loc.name, report);
+        if (await trySendPush(userKey, loc.name, report)) {
+          result.pushed += 1;
+        }
       } catch (e) {
         console.error(`[NOTIFY] ${loc.name}`, e);
       }
     }
   }
+
+  return result;
 }
