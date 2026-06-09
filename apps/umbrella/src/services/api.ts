@@ -171,7 +171,9 @@ export async function deleteLocation(userKey: string, id: string): Promise<void>
 export async function updateLocationApi(
   userKey: string,
   id: string,
-  patch: Partial<Pick<SavedLocation, 'name' | 'lat' | 'lng' | 'notifyEnabled' | 'notifyBeforeMin'>>,
+  patch: Partial<
+    Pick<SavedLocation, 'name' | 'lat' | 'lng' | 'address' | 'notifyEnabled' | 'notifyBeforeMin'>
+  >,
 ): Promise<SavedLocation> {
   const base = getApiBaseUrl();
   const res = await fetch(
