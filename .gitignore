@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 server/.env
+server/.mtls-vercel.env
 server/data/
 server/mtls/
 mTLS*.zip

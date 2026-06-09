@@ -131,7 +131,7 @@ export function getMtlsDiagnostics(): MtlsDiagnostics {
   let pairError: string | null = null;
   if (cert && key) {
     const v = validatePair(cert, key);
-    if (!v.ok) pairError = v.error;
+    if (v.ok === false) pairError = v.error;
   } else if (!cert && !key) {
     pairError = 'cert and key missing';
   } else if (!cert) {
