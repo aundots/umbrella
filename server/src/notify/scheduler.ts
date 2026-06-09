@@ -5,17 +5,20 @@ import { isMtlsConfigured } from '../toss/mtls.js';
 import {
   buildPushMsg,
   buildPushMsgClear,
+  buildPushMsgEndSoon,
   sendFunctionalMessage,
 } from '../toss/messenger.js';
 
 const sent = new Map<string, number>();
 const COOLDOWN_MS = 30 * 60 * 1000;
+const END_SOON_LEAD_MIN = 30;
 
 export interface NotifyScanResult {
   users: number;
   locations: number;
   triggered: number;
   pushed: number;
+  endSoon: number;
   cleared: number;
   skippedCooldown: number;
   errors: number;
@@ -26,6 +29,7 @@ interface LocationScanDelta {
   relayDirty: boolean;
   triggered: number;
   pushed: number;
+  endSoon: number;
   cleared: number;
   skippedCooldown: number;
   errored: boolean;
@@ -40,7 +44,7 @@ async function trySendPush(
   templateCode: string,
   context: Record<string, string>,
   locName: string,
-  kind: 'rain' | 'clear',
+  kind: 'rain' | 'clear' | 'end_soon',
 ): Promise<boolean> {
   if (!isMtlsConfigured() || !isTossUserKey(userKey)) return false;
 
@@ -72,12 +76,14 @@ async function scanLocation(
   loc: SavedLocation,
   rainTemplate: string | undefined,
   clearTemplate: string | undefined,
+  endSoonTemplate: string | undefined,
   relayPhases: Record<string, RelayPhase>,
 ): Promise<LocationScanDelta> {
   const delta: LocationScanDelta = {
     relayDirty: false,
     triggered: 0,
     pushed: 0,
+    endSoon: 0,
     cleared: 0,
     skippedCooldown: 0,
     errored: false,
@@ -120,6 +126,40 @@ async function scanLocation(
           )
         ) {
           delta.cleared += 1;
+        }
+      }
+    }
+
+    const remainingMin = report.end.remainingMinutes;
+    const shouldNotifyEndSoon =
+      report.end.soon &&
+      report.now.precipitating &&
+      remainingMin != null &&
+      remainingMin > 0 &&
+      remainingMin <= END_SOON_LEAD_MIN &&
+      endSoonTemplate;
+
+    if (shouldNotifyEndSoon) {
+      const endKey = report.end.at?.slice(0, 16) ?? String(remainingMin);
+      const eventKey = `${stateKey}:end_soon:${endKey}`;
+      if (withinCooldown(eventKey)) {
+        delta.skippedCooldown += 1;
+      } else {
+        markSent(eventKey);
+        delta.triggered += 1;
+        console.log(
+          `[NOTIFY] user=${userKey} [${loc.name}] end_soon in=${remainingMin}min`,
+        );
+        if (
+          await trySendPush(
+            userKey,
+            endSoonTemplate,
+            { msg: buildPushMsgEndSoon(loc.name, remainingMin) },
+            loc.name,
+            'end_soon',
+          )
+        ) {
+          delta.endSoon += 1;
         }
       }
     }
@@ -168,6 +208,7 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
   const started = Date.now();
   const rainTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE?.trim();
   const clearTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE_CLEAR?.trim();
+  const endSoonTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE_END_SOON?.trim();
 
   const targets = await listNotifyTargets();
   const relayPhases = await loadRelayPhases();
@@ -181,7 +222,7 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
 
   const deltas = await Promise.all(
     jobs.map(({ userKey, loc }) =>
-      scanLocation(userKey, loc, rainTemplate, clearTemplate, relayPhases),
+      scanLocation(userKey, loc, rainTemplate, clearTemplate, endSoonTemplate, relayPhases),
     ),
   );
 
@@ -190,6 +231,7 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
     locations: jobs.length,
     triggered: 0,
     pushed: 0,
+    endSoon: 0,
     cleared: 0,
     skippedCooldown: 0,
     errors: 0,
@@ -200,6 +242,7 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
   for (const delta of deltas) {
     result.triggered += delta.triggered;
     result.pushed += delta.pushed;
+    result.endSoon += delta.endSoon;
     result.cleared += delta.cleared;
     result.skippedCooldown += delta.skippedCooldown;
     if (delta.errored) result.errors += 1;

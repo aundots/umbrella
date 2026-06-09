@@ -5,9 +5,12 @@ import {
   ncstRn1,
 } from '../kma/client.js';
 import { buildForecastDetail } from '../kma/forecastDetail.js';
+import { fetchVilageFcst } from '../kma/vilageFcst.js';
 import { FcstSlot, ForecastDetail, PrecipType } from '../kma/types.js';
 import {
   analyzeNowcastArrival,
+  analyzeVilageEnd,
+  blendPrecipEnd,
   loadNowcastContext,
   mergeTimelineWithNowcast,
   nowcastConfidenceBoost,
@@ -38,6 +41,8 @@ export interface LiveRelayReport {
     willStop: boolean;
     at: string | null;
     remainingMinutes: number | null;
+    /** True when rain is active and predicted to stop within ~30 minutes. */
+    soon: boolean;
   };
   confidence: number;
   relayStatus: 'live' | 'approaching' | 'clear';
@@ -139,9 +144,12 @@ export async function buildLiveRelayReport(
   options: LiveRelayReportOptions = {},
 ): Promise<LiveRelayReport> {
   const now = new Date();
-  const [{ nx, ny, ncst, fcst }, nowcast] = await Promise.all([
-    fetchLocationWeather(params.lat, params.lng),
+  const weatherPromise = fetchLocationWeather(params.lat, params.lng);
+  const [{ nx, ny, ncst, fcst }, nowcast, vilageSlots] = await Promise.all([
+    weatherPromise,
     loadNowcastContext(params.lat, params.lng),
+    weatherPromise
+      .then(({ nx, ny }) => withDeadline(fetchVilageFcst(nx, ny), 5_000, []).catch(() => [])),
   ]);
   const detailPromise = options.skipDetail
     ? Promise.resolve(undefined as ForecastDetail | undefined)
@@ -180,11 +188,16 @@ export async function buildLiveRelayReport(
   }
   const blendedPeak = Math.max(peakRate, mapleArrival.peakRate, currentRate);
 
-  let endAt: Date | null = endSlot;
-  if (precipNow && !endAt) {
-    const lastPrecip = fcst.filter((s) => isPrecipitating(s.pty)).pop();
-    if (lastPrecip) endAt = new Date(lastPrecip.at.getTime() + 30 * 60000);
-  }
+  const timeline = mergeTimelineWithNowcast(buildTimeline(now, fcst), nowcast);
+  const vilageEnd = analyzeVilageEnd(now, vilageSlots, precipNow);
+  let endAt = blendPrecipEnd(now, {
+    precipNow,
+    ultraEnd: endSlot,
+    nowcast,
+    timeline,
+    vilageEnd,
+    fcst,
+  });
 
   const windDeg = getWindFromFcst(fcst);
   const terrain = computeTerrainContext(params.lat, params.lng, windDeg, null);
@@ -209,6 +222,13 @@ export async function buildLiveRelayReport(
 
   const detail = await detailPromise;
 
+  const remainingMinutes = adjusted.endAt ? minutesUntil(now, adjusted.endAt) : null;
+  const endSoon =
+    precipNow &&
+    remainingMinutes != null &&
+    remainingMinutes > 0 &&
+    remainingMinutes <= 30;
+
   return {
     locationId: params.locationId,
     locationName: params.locationName,
@@ -227,7 +247,8 @@ export async function buildLiveRelayReport(
     end: {
       willStop: precipNow || adjusted.willArrive,
       at: adjusted.endAt?.toISOString() ?? null,
-      remainingMinutes: adjusted.endAt ? minutesUntil(now, adjusted.endAt) : null,
+      remainingMinutes,
+      soon: endSoon,
     },
     confidence,
     relayStatus,
@@ -237,7 +258,7 @@ export async function buildLiveRelayReport(
       dataSource: resolveDataSource(nowcast),
     },
     terrain,
-    timeline: mergeTimelineWithNowcast(buildTimeline(now, fcst), nowcast),
+    timeline,
     detail,
   };
 }

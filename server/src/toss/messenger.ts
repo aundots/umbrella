@@ -10,9 +10,12 @@ export interface SendMessageInput {
 export const PUSH_RAIN_SUFFIX = ' 비 와요.';
 /** 콘솔 내용: `{{ msg }} 비 그쳤어요.` */
 export const PUSH_CLEAR_SUFFIX = ' 비 그쳤어요.';
+/** 콘솔 내용: `{{ msg }} 비 곧 그쳐요.` */
+export const PUSH_END_SOON_SUFFIX = ' 비 곧 그쳐요.';
 
 const RAIN_MSG_MAX = 25 - PUSH_RAIN_SUFFIX.length;
 const CLEAR_MSG_MAX = 25 - PUSH_CLEAR_SUFFIX.length;
+const END_SOON_MSG_MAX = 25 - PUSH_END_SOON_SUFFIX.length;
 
 /** @deprecated PUSH_RAIN_SUFFIX */
 export const PUSH_BODY_SUFFIX = PUSH_RAIN_SUFFIX;
@@ -25,6 +28,11 @@ export const DEFAULT_PUSH_CONTEXT: Record<string, string> = {
 /** 강수 종료 테스트 */
 export const DEFAULT_PUSH_CLEAR_CONTEXT: Record<string, string> = {
   msg: '지금 집에',
+};
+
+/** 강수 곧 종료 테스트 */
+export const DEFAULT_PUSH_END_SOON_CONTEXT: Record<string, string> = {
+  msg: '30분 후 집에',
 };
 
 function truncate(text: string, max: number): string {
@@ -59,6 +67,13 @@ export function buildPushMsg(
 export function buildPushMsgClear(locName: string): string {
   const place = truncate(locName.trim() || '현재 위치', 8);
   return truncate(`지금 ${place}에`, CLEAR_MSG_MAX);
+}
+
+/** 푸시 본문 — `{{ msg }} 비 곧 그쳐요.` 에 들어갈 앞부분 */
+export function buildPushMsgEndSoon(locName: string, remainingMinutes: number): string {
+  const place = truncate(locName.trim() || '현재 위치', 8);
+  const mins = Math.max(1, Math.min(60, Math.round(remainingMinutes)));
+  return truncate(`${mins}분 후 ${place}에`, END_SOON_MSG_MAX);
 }
 
 /** @deprecated buildPushMsg 사용 */

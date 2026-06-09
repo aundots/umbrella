@@ -151,10 +151,6 @@ export default function TimelineScreen() {
             </Txt>
           )}
 
-          <NavLink
-            label="레이더 영상 보기"
-            onPress={() => navigateWithAd((r) => navigation.navigate(r), '/radar')}
-          />
         </>
       )}
     </ScrollView>

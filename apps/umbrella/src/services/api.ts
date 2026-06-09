@@ -23,6 +23,7 @@ export interface LiveRelayReport {
     willStop: boolean;
     at: string | null;
     remainingMinutes: number | null;
+    soon: boolean;
   };
   confidence: number;
   relayStatus: 'live' | 'approaching' | 'clear';
@@ -135,16 +136,22 @@ export async function saveLocation(
 
 export async function sendTestPush(
   userKey: string,
-  kind: 'rain' | 'clear' = 'rain',
+  kind: 'rain' | 'clear' | 'end_soon' = 'rain',
 ): Promise<{ resultType?: string; error?: { reason?: string } }> {
   const base = getApiBaseUrl();
+  const contextByKind =
+    kind === 'clear'
+      ? { msg: '지금 집에' }
+      : kind === 'end_soon'
+        ? { msg: '30분 후 집에' }
+        : { msg: '30분 후 집에' };
   const res = await fetch(`${base}/toss/push/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       userKey,
       kind,
-      context: kind === 'clear' ? { msg: '지금 집에' } : { msg: '30분 후 집에' },
+      context: contextByKind,
     }),
   });
   const json = (await res.json()) as { resultType?: string; error?: { reason?: string }; message?: string };

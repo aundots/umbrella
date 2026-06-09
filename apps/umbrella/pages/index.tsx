@@ -9,11 +9,13 @@ import {
 import { useNavigation } from '@granite-js/react-native';
 import { Button, Txt } from '@toss/tds-react-native';
 import { preloadInterstitial } from '../src/ads/interstitial';
+import { BannerAd } from '../src/ads/BannerAd';
 import { navigateWithAd } from '../src/ads/navigateWithAd';
 import { useAuth } from '../src/auth/AuthContext';
 import { COLORS, MetaLine, RelayCard } from '../src/components/RelayCard';
 import { LocationSearch } from '../src/components/LocationSearch';
 import { Chip, ErrorBanner, IconChip, NavLink } from '../src/components/ui';
+import { RadarPanel } from '../src/components/RadarPanel';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
 import { sharedStyles, SPACING } from '../src/theme';
 import {
@@ -182,11 +184,11 @@ export default function HomeScreen() {
                   )}
                 </RelayCard>
 
-                <RelayCard title="종료" accent={COLORS.primary}>
+                <RelayCard title="종료" accent={report.end.soon ? COLORS.approaching : COLORS.primary}>
                   {report.end.at ? (
                     <>
                       <Txt typography="t4" fontWeight="bold" color={COLORS.text}>
-                        약 {formatTime(report.end.at)}
+                        {report.end.soon ? '곧 그침 · ' : ''}약 {formatTime(report.end.at)}
                       </Txt>
                       {report.end.remainingMinutes != null && (
                         <Txt typography="t5" color={COLORS.sub} style={styles.value}>
@@ -212,10 +214,6 @@ export default function HomeScreen() {
                   label="시간별 중계표 보기"
                   onPress={() => navigateWithAd((r) => navigation.navigate(r), '/timeline')}
                 />
-                <NavLink
-                  label="레이더 영상 보기"
-                  onPress={() => navigateWithAd((r) => navigation.navigate(r), '/radar')}
-                />
               </>
             ) : !loading ? (
               <RelayCard title="지금" accent={COLORS.primary}>
@@ -226,6 +224,9 @@ export default function HomeScreen() {
             ) : null}
           </>
         )}
+
+        <RadarPanel />
+        <BannerAd />
       </ScrollView>
     </View>
   );

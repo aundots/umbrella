@@ -1,7 +1,10 @@
 import { withDeadline } from '../kma/fetchUtil.js';
 import { fetchMapleAtLocation, MapleForecastSlot } from '../kma/maple.js';
-import { PrecipType } from '../kma/types.js';
+import { FcstSlot, PrecipType, VilageHourly } from '../kma/types.js';
 import { fetchHsrRainGrid, rainRateAt } from '../kma/wthrRadar.js';
+
+const RATE_END_THRESHOLD = 0.05;
+const POP_END_THRESHOLD = 30;
 
 const NOWCAST_BUDGET_MS = 12_000;
 
@@ -120,4 +123,127 @@ export function resolveDataSource(ctx: NowcastContext): 'aws' | 'hsr' | 'blended
   if (ctx.hsrAvailable && ctx.mapleAvailable) return 'blended';
   if (ctx.hsrAvailable) return 'hsr';
   return 'fcst';
+}
+
+function slotIsWet(rateMmH: number, type: PrecipType): boolean {
+  return rateMmH > RATE_END_THRESHOLD || type !== 'none';
+}
+
+function vilageSlotIsWet(slot: VilageHourly): boolean {
+  return (
+    slot.pty !== 'none' ||
+    (slot.pop ?? 0) >= POP_END_THRESHOLD ||
+    slot.pcpMm >= 0.1
+  );
+}
+
+/** MAPLE QPF: first future lead when rate drops after current precip. */
+export function analyzeNowcastEnd(
+  now: Date,
+  ctx: NowcastContext,
+  precipNow: boolean,
+): Date | null {
+  if (!precipNow || ctx.mapleSlots.length === 0) return null;
+
+  const sorted = [...ctx.mapleSlots].sort((a, b) => a.offsetMin - b.offsetMin);
+  let inPrecip = precipNow;
+
+  for (const slot of sorted) {
+    const wet = slot.rateMmH > RATE_END_THRESHOLD;
+    if (inPrecip && !wet && slot.offsetMin > 0) {
+      return new Date(now.getTime() + slot.offsetMin * 60000);
+    }
+    if (wet) inPrecip = true;
+  }
+
+  return null;
+}
+
+/** Blended 0–60 min timeline: first dry slot after precip. */
+export function analyzeTimelineEnd(
+  now: Date,
+  timeline: Array<{ offsetMin: number; rateMmH: number; type: PrecipType }>,
+  precipNow: boolean,
+): Date | null {
+  if (!precipNow) return null;
+
+  let inPrecip = precipNow;
+  for (const slot of [...timeline].sort((a, b) => a.offsetMin - b.offsetMin)) {
+    const wet = slotIsWet(slot.rateMmH, slot.type);
+    if (inPrecip && !wet && slot.offsetMin > 0) {
+      return new Date(now.getTime() + slot.offsetMin * 60000);
+    }
+    if (wet) inPrecip = true;
+  }
+
+  return null;
+}
+
+/** Vilage hourly: longer-horizon PTY/POP end after current rain. */
+export function analyzeVilageEnd(
+  now: Date,
+  vilage: VilageHourly[],
+  precipNow: boolean,
+): Date | null {
+  if (!precipNow || vilage.length === 0) return null;
+
+  let inPrecip = precipNow;
+  for (const slot of vilage.filter((s) => s.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())) {
+    const wet = vilageSlotIsWet(slot);
+    if (inPrecip && !wet) return slot.at;
+    if (wet) inPrecip = true;
+  }
+
+  return null;
+}
+
+export interface BlendPrecipEndInput {
+  precipNow: boolean;
+  ultraEnd: Date | null;
+  nowcast: NowcastContext;
+  timeline: Array<{ offsetMin: number; rateMmH: number; type: PrecipType }>;
+  vilageEnd: Date | null;
+  fcst: FcstSlot[];
+}
+
+function isPrecipitating(type: PrecipType): boolean {
+  return type !== 'none';
+}
+
+/** Combine ultra, MAPLE, timeline, and vilage into a single end time. */
+export function blendPrecipEnd(now: Date, input: BlendPrecipEndInput): Date | null {
+  if (!input.precipNow) return input.ultraEnd;
+
+  const mapleEnd = analyzeNowcastEnd(now, input.nowcast, input.precipNow);
+  const timelineEnd = analyzeTimelineEnd(now, input.timeline, input.precipNow);
+
+  let endAt: Date | null = null;
+
+  if (mapleEnd) {
+    endAt = mapleEnd;
+  } else if (timelineEnd || input.ultraEnd) {
+    const candidates = [timelineEnd, input.ultraEnd].filter(Boolean) as Date[];
+    endAt = new Date(Math.max(...candidates.map((d) => d.getTime())));
+  }
+
+  const shortTermMinutes = endAt
+    ? Math.max(0, Math.round((endAt.getTime() - now.getTime()) / 60000))
+    : null;
+
+  if (
+    input.vilageEnd &&
+    (endAt == null || (shortTermMinutes != null && shortTermMinutes >= 55))
+  ) {
+    endAt =
+      endAt == null
+        ? input.vilageEnd
+        : new Date(Math.max(endAt.getTime(), input.vilageEnd.getTime()));
+  }
+
+  if (!endAt) {
+    const lastPrecip = input.fcst.filter((s) => isPrecipitating(s.pty)).pop();
+    if (lastPrecip) endAt = new Date(lastPrecip.at.getTime() + 30 * 60000);
+  }
+
+  return endAt;
 }
