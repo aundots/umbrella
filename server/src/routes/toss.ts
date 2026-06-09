@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { deleteUserData, upsertUser } from '../db/store.js';
-import { isMtlsConfigured } from '../toss/mtls.js';
+import { getMtlsDiagnostics, isMtlsConfigured } from '../toss/mtls.js';
 import {
   exchangeAuthorizationCode,
   removeAccessByUserKey,
@@ -9,8 +9,8 @@ import { sendFunctionalMessage, sendTestFunctionalMessage } from '../toss/messen
 
 export function registerTossRoutes(app: FastifyInstance): void {
   app.get('/toss/mtls-status', async () => ({
-    configured: isMtlsConfigured(),
     apiBase: process.env.TOSS_API_BASE_URL ?? 'https://apps-in-toss-api.toss.im',
+    ...getMtlsDiagnostics(),
   }));
 
   app.post<{ Body: { authorizationCode: string; referrer: string } }>(
