@@ -52,7 +52,7 @@ export async function fetchVilageApi(
 export async function fetchRadarApi(
   path: string,
   params: Record<string, string>,
-): Promise<Record<string, string>[]> {
+): Promise<Record<string, unknown>[]> {
   const url = new URL(`${RADAR_BASE}/${path}`);
   url.searchParams.set('serviceKey', getServiceKey());
   url.searchParams.set('pageNo', '1');
@@ -67,7 +67,7 @@ export async function fetchRadarApi(
   const json = (await res.json()) as {
     response?: {
       header?: { resultCode: string; resultMsg: string };
-      body?: { items?: { item?: Record<string, string> | Record<string, string>[] } };
+      body?: { items?: { item?: Record<string, unknown> | Record<string, unknown>[] } };
     };
   };
 

@@ -3,7 +3,7 @@ import { getCached, setCache } from '../kma/cache.js';
 import { fetchLocationWeather } from '../kma/client.js';
 import { buildForecastDetail } from '../kma/forecastDetail.js';
 import { fetchRadarFrames, proxyImagePath } from '../kma/radar.js';
-const RADAR_IMG_BASE = 'https://www.weather.go.kr/w/repositary/image/rdr/img/CMP_WRC/';
+const RADAR_IMG_BASE = 'http://www.kma.go.kr/repositary/image/rdr/img/';
 
 export function registerForecastRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { lat: string; lng: string } }>('/forecast', async (req, reply) => {

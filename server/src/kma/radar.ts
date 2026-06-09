@@ -1,7 +1,7 @@
 import { fetchRadarApi } from './http.js';
 import { RadarFrame } from './types.js';
 
-const RADAR_IMG_BASE = 'https://www.weather.go.kr/w/repositary/image/rdr/img/CMP_WRC/';
+const RADAR_IMG_BASE = 'http://www.kma.go.kr/repositary/image/rdr/img/';
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
@@ -19,17 +19,28 @@ function toImageUrl(file: string): string {
   return `${RADAR_IMG_BASE}${name}`;
 }
 
-function parseFrameTime(raw: string | undefined): string {
-  if (!raw) return '';
-  if (raw.length >= 12) {
-    const y = raw.slice(0, 4);
-    const m = raw.slice(4, 6);
-    const d = raw.slice(6, 8);
-    const h = raw.slice(8, 10);
-    const min = raw.slice(10, 12);
-    return `${y}-${m}-${d}T${h}:${min}:00+09:00`;
+function parseTimeFromFilename(name: string): string {
+  const m = name.match(/(\d{12})\.png$/i);
+  if (!m) return '';
+  const raw = m[1];
+  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}T${raw.slice(8, 10)}:${raw.slice(10, 12)}:00+09:00`;
+}
+
+function fileNameFromUrl(url: string): string {
+  return url.includes('/') ? url.split('/').pop()! : url;
+}
+
+function collectImageUrls(items: Record<string, unknown>[]): string[] {
+  const urls: string[] = [];
+  for (const it of items) {
+    const raw = it['rdr-img-file'] ?? it.img ?? it.rdrImg ?? it.image;
+    if (Array.isArray(raw)) {
+      urls.push(...raw.filter(Boolean));
+    } else if (typeof raw === 'string' && raw) {
+      urls.push(raw);
+    }
   }
-  return raw;
+  return urls;
 }
 
 export async function fetchRadarFrames(): Promise<RadarFrame[]> {
@@ -38,15 +49,14 @@ export async function fetchRadarFrames(): Promise<RadarFrame[]> {
     time: todayKst(),
   });
 
-  const frames: RadarFrame[] = items
-    .map((it) => {
-      const file = it.img ?? it.rdrImg ?? it.image ?? '';
-      const tm = it.tm ?? it.tmUtc ?? it.time ?? '';
+  const frames: RadarFrame[] = collectImageUrls(items)
+    .map((url) => {
+      const file = fileNameFromUrl(url);
       if (!file) return null;
       return {
-        time: parseFrameTime(tm),
+        time: parseTimeFromFilename(file),
         file,
-        imageUrl: toImageUrl(file),
+        imageUrl: toImageUrl(url),
       };
     })
     .filter((f): f is RadarFrame => f != null);
