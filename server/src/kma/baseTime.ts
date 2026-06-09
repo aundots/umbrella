@@ -23,6 +23,29 @@ export function getUltraFcstBaseTime(now = new Date()): { baseDate: string; base
   return { baseDate, baseTime };
 }
 
+/** 동네예보 발표 시각 (02·05·08·11·14·17·20·23시) */
+export function getVilageFcstBaseTime(now = new Date()): { baseDate: string; baseTime: string } {
+  const baseHours = [23, 20, 17, 14, 11, 8, 5, 2];
+  const d = new Date(now);
+  d.setMinutes(d.getMinutes() - 15);
+
+  const hour = d.getHours();
+  const picked = baseHours.find((h) => hour >= h);
+  if (picked != null) {
+    return {
+      baseDate: `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`,
+      baseTime: `${pad(picked)}00`,
+    };
+  }
+
+  const prev = new Date(d);
+  prev.setDate(prev.getDate() - 1);
+  return {
+    baseDate: `${prev.getFullYear()}${pad(prev.getMonth() + 1)}${pad(prev.getDate())}`,
+    baseTime: '2300',
+  };
+}
+
 export function parseKmaTime(baseDate: string, time: string): Date {
   const y = Number(baseDate.slice(0, 4));
   const m = Number(baseDate.slice(4, 6)) - 1;

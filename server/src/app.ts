@@ -12,6 +12,7 @@ import { getCached, setCache } from './kma/cache.js';
 import { registerLegalRoutes } from './routes/legal.js';
 import { registerCronRoutes } from './routes/cron.js';
 import { registerGeocodeRoutes } from './routes/geocode.js';
+import { registerForecastRoutes } from './routes/forecast.js';
 import { registerTossRoutes } from './routes/toss.js';
 import { persistenceMode } from './db/persistence.js';
 import { isMtlsConfigured } from './toss/mtls.js';
@@ -23,6 +24,7 @@ export async function buildApp() {
   registerGeocodeRoutes(app);
   registerTossRoutes(app);
   registerCronRoutes(app);
+  registerForecastRoutes(app);
 
   app.get('/health', async () => ({
     ok: true,

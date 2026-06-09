@@ -1,42 +1,10 @@
 import { getUltraFcstBaseTime, getUltraNcstBaseTime } from './baseTime.js';
+import { fetchVilageApi } from './http.js';
 import { latLngToGrid } from './grid.js';
 import { FcstSlot, KmaItem, PTY_MAP, PrecipType } from './types.js';
 
-const BASE = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0';
-
-function getServiceKey(): string {
-  const key = process.env.DATA_GO_KR_SERVICE_KEY;
-  if (!key) throw new Error('DATA_GO_KR_SERVICE_KEY is not set');
-  return decodeURIComponent(key);
-}
-
 async function fetchKma(path: string, params: Record<string, string>): Promise<KmaItem[]> {
-  const url = new URL(`${BASE}/${path}`);
-  url.searchParams.set('serviceKey', getServiceKey());
-  url.searchParams.set('pageNo', '1');
-  url.searchParams.set('numOfRows', '1000');
-  url.searchParams.set('dataType', 'JSON');
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
-  }
-
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`KMA HTTP ${res.status}`);
-  const json = (await res.json()) as {
-    response?: {
-      header?: { resultCode: string; resultMsg: string };
-      body?: { items?: { item?: KmaItem | KmaItem[] } };
-    };
-  };
-
-  const code = json.response?.header?.resultCode;
-  if (code !== '00') {
-    throw new Error(`KMA API error: ${json.response?.header?.resultMsg ?? code}`);
-  }
-
-  const item = json.response?.body?.items?.item;
-  if (!item) return [];
-  return Array.isArray(item) ? item : [item];
+  return fetchVilageApi(path, params);
 }
 
 export async function fetchUltraNcst(nx: number, ny: number): Promise<Map<string, string>> {
@@ -81,6 +49,18 @@ export async function fetchUltraFcst(nx: number, ny: number): Promise<FcstSlot[]
       case 'VVV':
         slot.vvv = Number(val);
         break;
+      case 'T1H':
+        slot.t1h = Number(val);
+        break;
+      case 'REH':
+        slot.reh = Number(val);
+        break;
+      case 'SKY':
+        slot.sky = val;
+        break;
+      case 'LGT':
+        slot.lgt = val !== '0' && val !== '';
+        break;
     }
     byTime.set(key, slot);
   }
@@ -93,6 +73,10 @@ export async function fetchUltraFcst(nx: number, ny: number): Promise<FcstSlot[]
       rn1: s.rn1 ?? 0,
       uuu: s.uuu,
       vvv: s.vvv,
+      t1h: s.t1h,
+      reh: s.reh,
+      sky: s.sky,
+      lgt: s.lgt,
     }));
 }
 

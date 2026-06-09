@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
+import { preloadInterstitial } from '../src/ads/interstitial';
+import { navigateWithAd } from '../src/ads/navigateWithAd';
 import { useAuth } from '../src/auth/AuthContext';
 import { COLORS, MetaLine, RelayCard } from '../src/components/RelayCard';
 import { LocationSearch } from '../src/components/LocationSearch';
@@ -25,6 +27,12 @@ export default function HomeScreen() {
   const { locations, active, activeId, activeAddress, setActiveId, addSearchedPlace } =
     useLocations();
   const { report, loading, error, reload } = useRelay(active);
+
+  useEffect(() => {
+    if (!report || loading) return;
+    const timer = setTimeout(() => preloadInterstitial(), 2500);
+    return () => clearTimeout(timer);
+  }, [report, loading]);
 
   const statusColor =
     report?.relayStatus === 'live'
@@ -87,7 +95,10 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity style={styles.tab} onPress={() => navigation.navigate('/settings')}>
+        <TouchableOpacity
+          style={styles.tab}
+          onPress={() => navigateWithAd((r) => navigation.navigate(r), '/settings')}
+        >
           <Text style={styles.tabText}>+</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -119,6 +130,14 @@ export default function HomeScreen() {
                   <Text style={styles.value}>강수 없음</Text>
                 )}
                 <MetaLine text={`${formatTime(report.observedAt)} 관측 · 500m 구역 기준`} />
+                {report.detail?.nowObs?.tempC != null && (
+                  <Text style={styles.value}>
+                    기온 {report.detail.nowObs.tempC}°C
+                    {report.detail.nowObs.humidity != null
+                      ? ` · 습도 ${report.detail.nowObs.humidity}%`
+                      : ''}
+                  </Text>
+                )}
               </RelayCard>
 
               <RelayCard title="→ 도달" accent={COLORS.approaching}>
@@ -156,9 +175,15 @@ export default function HomeScreen() {
 
               <TouchableOpacity
                 style={styles.linkBtn}
-                onPress={() => navigation.navigate('/timeline')}
+                onPress={() => navigateWithAd((r) => navigation.navigate(r), '/timeline')}
               >
                 <Text style={styles.linkText}>시간별 중계표 보기 →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.linkBtn}
+                onPress={() => navigateWithAd((r) => navigation.navigate(r), '/radar')}
+              >
+                <Text style={styles.linkText}>레이더 영상 보기 →</Text>
               </TouchableOpacity>
             </>
           ) : !loading ? (

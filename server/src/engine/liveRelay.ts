@@ -3,7 +3,8 @@ import {
   ncstPrecipType,
   ncstRn1,
 } from '../kma/client.js';
-import { FcstSlot, PrecipType } from '../kma/types.js';
+import { buildForecastDetail } from '../kma/forecastDetail.js';
+import { FcstSlot, ForecastDetail, PrecipType } from '../kma/types.js';
 import {
   applyTerrainAdjust,
   computeTerrainContext,
@@ -39,6 +40,7 @@ export interface LiveRelayReport {
   };
   terrain: ReturnType<typeof computeTerrainContext> | null;
   timeline: Array<{ offsetMin: number; rateMmH: number; type: PrecipType }>;
+  detail?: ForecastDetail;
 }
 
 function isPrecipitating(type: PrecipType): boolean {
@@ -121,7 +123,7 @@ export async function buildLiveRelayReport(params: {
   lng: number;
 }): Promise<LiveRelayReport> {
   const now = new Date();
-  const { ncst, fcst } = await fetchLocationWeather(params.lat, params.lng);
+  const { nx, ny, ncst, fcst } = await fetchLocationWeather(params.lat, params.lng);
 
   const currentType = ncstPrecipType(ncst);
   const currentRate = rn1ToRateMmH(ncstRn1(ncst));
@@ -162,6 +164,13 @@ export async function buildLiveRelayReport(params: {
 
   const confidence = computeConfidence(currentType, fcst, adjusted.confidenceDelta);
 
+  let detail: ForecastDetail | undefined;
+  try {
+    detail = await buildForecastDetail(nx, ny, ncst, fcst);
+  } catch {
+    detail = undefined;
+  }
+
   return {
     locationId: params.locationId,
     locationName: params.locationName,
@@ -191,6 +200,7 @@ export async function buildLiveRelayReport(params: {
     },
     terrain,
     timeline: buildTimeline(now, fcst),
+    detail,
   };
 }
 

@@ -24,4 +24,51 @@ export interface FcstSlot {
   rn1: number;
   uuu?: number;
   vvv?: number;
+  t1h?: number;
+  reh?: number;
+  sky?: string;
+  lgt?: boolean;
+}
+
+export interface VilageHourly {
+  at: Date;
+  tempC?: number;
+  pop?: number;
+  pcp: string;
+  pcpMm: number;
+  reh?: number;
+  wsd?: number;
+  sky?: string;
+  pty: PrecipType;
+}
+
+export interface DetailHourly {
+  at: string;
+  source: 'ultra' | 'vilage';
+  tempC?: number;
+  pop?: number;
+  humidity?: number;
+  windMs?: number;
+  sky?: string;
+  pcp?: string;
+  type: PrecipType;
+  rateMmH?: number;
+}
+
+export interface RadarFrame {
+  time: string;
+  file: string;
+  imageUrl: string;
+}
+
+export interface ForecastDetail {
+  nowObs: {
+    tempC?: number;
+    humidity?: number;
+    sky?: string;
+    lightning?: boolean;
+  };
+  ultraHourly: DetailHourly[];
+  vilageHourly: DetailHourly[];
+  vilageAvailable: boolean;
 }

@@ -38,6 +38,44 @@ export interface LiveRelayReport {
     note: string | null;
   } | null;
   timeline: Array<{ offsetMin: number; rateMmH: number; type: string }>;
+  detail?: ForecastDetail;
+}
+
+export interface DetailHourly {
+  at: string;
+  source: 'ultra' | 'vilage';
+  tempC?: number;
+  pop?: number;
+  humidity?: number;
+  windMs?: number;
+  sky?: string;
+  pcp?: string;
+  type: string;
+  rateMmH?: number;
+}
+
+export interface ForecastDetail {
+  nowObs: {
+    tempC?: number;
+    humidity?: number;
+    sky?: string;
+    lightning?: boolean;
+  };
+  ultraHourly: DetailHourly[];
+  vilageHourly: DetailHourly[];
+  vilageAvailable: boolean;
+}
+
+export interface RadarFrame {
+  time: string;
+  file: string;
+  imageUrl: string;
+  proxyUrl: string;
+}
+
+export interface RadarResponse {
+  frames: RadarFrame[];
+  latestIndex: number;
 }
 
 export interface SavedLocation {
@@ -146,6 +184,31 @@ export async function updateLocationApi(
   );
   if (!res.ok) throw new Error('update location failed');
   return res.json() as Promise<SavedLocation>;
+}
+
+export async function fetchForecast(lat: number, lng: number): Promise<ForecastDetail> {
+  const base = getApiBaseUrl();
+  const q = new URLSearchParams({ lat: String(lat), lng: String(lng) });
+  const res = await fetch(`${base}/forecast?${q}`);
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new Error(err.message ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<ForecastDetail>;
+}
+
+export async function fetchRadar(): Promise<RadarResponse> {
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/radar`);
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { message?: string; hint?: string };
+    throw new Error(err.hint ?? err.message ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<RadarResponse>;
+}
+
+export function radarImageUrl(proxyPath: string): string {
+  return `${getApiBaseUrl()}${proxyPath}`;
 }
 
 export async function fetchRelayAll(userKey: string): Promise<LiveRelayReport[]> {
