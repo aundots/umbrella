@@ -106,11 +106,12 @@ export async function buildApp() {
       name: string;
       lat: number;
       lng: number;
+      address?: string;
       notifyEnabled?: boolean;
       notifyBeforeMin?: 30 | 60;
     };
   }>('/locations', async (req, reply) => {
-    const { userKey, name, lat, lng, notifyEnabled = true, notifyBeforeMin = 30 } =
+    const { userKey, name, lat, lng, address, notifyEnabled = true, notifyBeforeMin = 30 } =
       req.body ?? {};
     if (!userKey || !name || lat == null || lng == null) {
       return reply.status(400).send({ error: 'userKey, name, lat, lng required' });
@@ -119,7 +120,14 @@ export async function buildApp() {
     if (locs.length >= 5) {
       return reply.status(400).send({ error: 'max 5 locations' });
     }
-    return addLocation(userKey, { name, lat, lng, notifyEnabled, notifyBeforeMin });
+    return addLocation(userKey, {
+      name,
+      lat,
+      lng,
+      ...(address?.trim() ? { address: address.trim() } : {}),
+      notifyEnabled,
+      notifyBeforeMin,
+    });
   });
 
   app.put<{

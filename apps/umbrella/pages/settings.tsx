@@ -1,6 +1,7 @@
 import { Accuracy, useGeolocation } from '@apps-in-toss/framework';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -17,12 +18,15 @@ import { useAuth } from '../src/auth/AuthContext';
 import { useLocations } from '../src/hooks/useLocations';
 import {
   deleteLocation,
+  fetchRelay,
+  LiveRelayReport,
+  rainChanceAtMinute,
   registerUser,
   saveLocation,
   SavedLocation,
   sendTestPush,
 } from '../src/services/api';
-import { GeocodePlace } from '../src/services/geocode';
+import { GeocodePlace, reverseGeocode } from '../src/services/geocode';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
@@ -38,25 +42,86 @@ export default function SettingsScreen() {
   const [name, setName] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<GeocodePlace | null>(null);
   const [pushTesting, setPushTesting] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [previewReport, setPreviewReport] = useState<LiveRelayReport | null>(null);
+  const [addressById, setAddressById] = useState<Record<string, string>>({});
+
+  const previewCoords = useMemo(() => {
+    if (selectedPlace) return { lat: selectedPlace.lat, lng: selectedPlace.lng };
+    if (geo) return { lat: geo.coords.latitude, lng: geo.coords.longitude };
+    return null;
+  }, [selectedPlace, geo]);
 
   useEffect(() => {
     if (userKey) registerUser(userKey, notify);
   }, [notify, userKey]);
 
+  useEffect(() => {
+    if (!previewCoords) {
+      setPreviewReport(null);
+      return;
+    }
+
+    let cancelled = false;
+    fetchRelay(previewCoords.lat, previewCoords.lng, '미리보기')
+      .then((report) => {
+        if (!cancelled) setPreviewReport(report);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewReport(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [previewCoords?.lat, previewCoords?.lng]);
+
   const saved = locations.filter((l) => l.id !== 'current' && !l.id.startsWith('session-'));
 
-  const onUseCurrentLocation = () => {
+  useEffect(() => {
+    saved.forEach((loc) => {
+      if (loc.address) {
+        setAddressById((prev) => ({ ...prev, [loc.id]: loc.address! }));
+        return;
+      }
+      if (addressById[loc.id]) return;
+
+      reverseGeocode(loc.lat, loc.lng)
+        .then((place) => {
+          setAddressById((prev) => ({ ...prev, [loc.id]: place.address }));
+        })
+        .catch(() => {
+          setAddressById((prev) => ({ ...prev, [loc.id]: '주소를 불러오지 못했어요' }));
+        });
+    });
+  }, [saved]);
+
+  const chipLabel = (minutes: 30 | 60) => {
+    if (!previewReport) return `${minutes}분 전`;
+    return `${minutes}분 전 (${rainChanceAtMinute(previewReport, minutes)}%)`;
+  };
+
+  const onUseCurrentLocation = async () => {
     if (!geo) {
       Alert.alert('위치 확인 중', 'GPS 신호를 받는 중입니다. 잠시 후 다시 시도해 주세요.');
       return;
     }
-    setSelectedPlace({
-      name: '현재 위치',
-      address: `${geo.coords.latitude.toFixed(4)}, ${geo.coords.longitude.toFixed(4)}`,
-      lat: geo.coords.latitude,
-      lng: geo.coords.longitude,
-    });
-    if (!name.trim()) setName('현재 위치');
+
+    setGeoLoading(true);
+    try {
+      const place = await reverseGeocode(geo.coords.latitude, geo.coords.longitude);
+      setSelectedPlace({
+        name: '현재 위치',
+        address: place.address,
+        lat: geo.coords.latitude,
+        lng: geo.coords.longitude,
+      });
+      if (!name.trim()) setName('현재 위치');
+    } catch {
+      Alert.alert('주소 확인 실패', '잠시 후 다시 시도해 주세요.');
+    } finally {
+      setGeoLoading(false);
+    }
   };
 
   const onSelectPlace = (place: GeocodePlace) => {
@@ -82,6 +147,7 @@ export default function SettingsScreen() {
         name: name.trim(),
         lat: selectedPlace.lat,
         lng: selectedPlace.lng,
+        address: selectedPlace.address,
         notifyEnabled: notify,
         notifyBeforeMin: beforeMin,
       });
@@ -140,7 +206,7 @@ export default function SettingsScreen() {
         {authLoading ? (
           <Text style={styles.authValue}>연결 중…</Text>
         ) : userKey ? (
-          <Text style={styles.authValue}>연결됨 · userKey {userKey}</Text>
+          <Text style={styles.authValue}>연결됨</Text>
         ) : (
           <Text style={styles.authValue}>{authError ?? '로그인이 필요해요'}</Text>
         )}
@@ -178,23 +244,32 @@ export default function SettingsScreen() {
       ) : null}
 
       <Text style={styles.section}>알림 시점</Text>
-      <View style={styles.row}>
-        {[30, 60].map((m) => (
+      <Text style={styles.sectionHint}>선택 위치 기준 강수 가능성</Text>
+      <View style={styles.chipRow}>
+        {([30, 60] as const).map((m) => (
           <TouchableOpacity
             key={m}
             style={[styles.chip, beforeMin === m && styles.chipActive]}
-            onPress={() => setBeforeMin(m as 30 | 60)}
+            onPress={() => setBeforeMin(m)}
           >
             <Text style={[styles.chipText, beforeMin === m && styles.chipTextActive]}>
-              {m}분 전
+              {chipLabel(m)}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       <Text style={styles.section}>즐겨찾기 추가</Text>
-      <TouchableOpacity style={styles.gpsBtn} onPress={onUseCurrentLocation}>
-        <Text style={styles.gpsBtnText}>현재 위치로 추가</Text>
+      <TouchableOpacity
+        style={[styles.gpsBtn, geoLoading && styles.gpsBtnDisabled]}
+        onPress={onUseCurrentLocation}
+        disabled={geoLoading}
+      >
+        {geoLoading ? (
+          <ActivityIndicator color={COLORS.primary} />
+        ) : (
+          <Text style={styles.gpsBtnText}>현재 위치로 추가</Text>
+        )}
       </TouchableOpacity>
 
       <LocationSearch placeholder="지역 검색 (예: 집 근처 동네, 회사)" onSelect={onSelectPlace} />
@@ -225,7 +300,7 @@ export default function SettingsScreen() {
               <View style={styles.locInfo}>
                 <Text style={styles.locName}>{loc.name}</Text>
                 <Text style={styles.locCoord} numberOfLines={2}>
-                  {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}
+                  {loc.address ?? addressById[loc.id] ?? '주소 확인 중…'}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => onDelete(loc)}>
@@ -284,17 +359,27 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.sub,
     marginTop: 16,
+    marginBottom: 4,
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: COLORS.sub,
     marginBottom: 8,
   },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
   chip: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: '#E8EEF4',
-    marginRight: 8,
   },
   chipActive: { backgroundColor: COLORS.primary },
-  chipText: { color: COLORS.sub, fontWeight: '600' },
+  chipText: { color: COLORS.sub, fontWeight: '600', fontSize: 14 },
   chipTextActive: { color: '#fff' },
   gpsBtn: {
     backgroundColor: '#EEF4FB',
@@ -302,7 +387,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     marginBottom: 10,
+    minHeight: 44,
+    justifyContent: 'center',
   },
+  gpsBtnDisabled: { opacity: 0.7 },
   gpsBtnText: { color: COLORS.primary, fontWeight: '700' },
   selectedBox: {
     backgroundColor: '#fff',

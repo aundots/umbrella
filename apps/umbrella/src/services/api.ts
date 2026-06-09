@@ -185,3 +185,29 @@ export function statusLabel(status: LiveRelayReport['relayStatus']): string {
       return '맑음';
   }
 }
+
+/** 알림 시점 칩에 표시할 강수 가능성(%) */
+export function rainChanceAtMinute(report: LiveRelayReport, offsetMin: 30 | 60): number {
+  const slot = report.timeline.find((t) => t.offsetMin === offsetMin);
+  const precipAt = slot ? slot.type !== 'none' || slot.rateMmH > 0.1 : false;
+
+  if (report.now.precipitating) {
+    return Math.min(99, report.confidence);
+  }
+
+  if (precipAt && slot) {
+    const boost = Math.min(12, Math.round(slot.rateMmH * 2));
+    return Math.min(99, report.confidence + boost);
+  }
+
+  if (report.arrival.willArrive && report.arrival.inMinutes != null) {
+    const mins = report.arrival.inMinutes;
+    if (mins <= offsetMin) {
+      const ratio = 1 - (mins / (offsetMin + 1)) * 0.35;
+      return Math.min(95, Math.round(report.confidence * Math.max(0.45, ratio)));
+    }
+    return Math.max(8, Math.round(report.confidence * 0.2));
+  }
+
+  return Math.max(5, Math.round(report.confidence * 0.12));
+}
