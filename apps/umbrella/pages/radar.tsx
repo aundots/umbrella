@@ -3,9 +3,12 @@ import { ScrollView } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
 import { RadarPanel } from '../src/components/RadarPanel';
 import { NavLink } from '../src/components/ui';
+import { useTossHeader } from '../src/hooks/useTossHeader';
+import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
 import { sharedStyles } from '../src/theme';
 
-export default function RadarScreen() {
+function RadarScreen() {
+  useTossHeader();
   const navigation = useNavigation();
   const [radarGesturing, setRadarGesturing] = useState(false);
 
@@ -24,3 +27,7 @@ export default function RadarScreen() {
     </ScrollView>
   );
 }
+
+RadarScreen.screenOptions = TOSS_SCREEN_OPTIONS;
+
+export default RadarScreen;

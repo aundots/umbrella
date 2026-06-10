@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "granite dev",
     "prebuild": "node scripts/verify-brand-icon.mjs && node scripts/patch-granite-windows.mjs",
-    "build": "ait build",
+    "build": "ait build && node scripts/patch-ait-header.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },

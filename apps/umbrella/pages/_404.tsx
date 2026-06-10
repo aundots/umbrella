@@ -2,8 +2,11 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
 import { COLORS } from '../src/components/RelayCard';
+import { useTossHeader } from '../src/hooks/useTossHeader';
+import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
 
-export default function NotFoundScreen() {
+function NotFoundScreen() {
+  useTossHeader();
   const navigation = useNavigation();
 
   return (
@@ -29,3 +32,7 @@ const styles = StyleSheet.create({
   sub: { fontSize: 14, color: COLORS.sub, marginTop: 8 },
   link: { fontSize: 15, color: COLORS.primary, marginTop: 20, fontWeight: '600' },
 });
+
+NotFoundScreen.screenOptions = TOSS_SCREEN_OPTIONS;
+
+export default NotFoundScreen;

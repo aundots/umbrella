@@ -13,6 +13,8 @@ import { COLORS } from '../src/components/RelayCard';
 import { Card, Chip, SectionHeader } from '../src/components/ui';
 import { useAuth } from '../src/auth/AuthContext';
 import { useLocations } from '../src/hooks/useLocations';
+import { useTossHeader } from '../src/hooks/useTossHeader';
+import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
 import { sharedStyles, RADIUS } from '../src/theme';
 import {
   deleteLocation,
@@ -30,7 +32,8 @@ import { requestRainNotificationAgreement } from '../src/notify/agreement';
 
 const NAME_PRESETS = ['집', '회사'] as const;
 
-export default function SettingsScreen() {
+function SettingsScreen() {
+  useTossHeader();
   const { userKey, login } = useAuth();
   const { locations, reload } = useLocations();
   const geo = useGeolocation({
@@ -598,3 +601,7 @@ const styles = StyleSheet.create({
   locCard: { paddingVertical: 0, paddingHorizontal: 0, marginBottom: 8 },
   locActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
 });
+
+SettingsScreen.screenOptions = TOSS_SCREEN_OPTIONS;
+
+export default SettingsScreen;

@@ -16,6 +16,8 @@ import { LocationSearch } from '../src/components/LocationSearch';
 import { Chip, ErrorBanner, NavLink } from '../src/components/ui';
 import { RadarPanel } from '../src/components/RadarPanel';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
+import { useTossHeader } from '../src/hooks/useTossHeader';
+import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
 import { sharedStyles, SPACING } from '../src/theme';
 import {
   dataSourceLabel,
@@ -24,7 +26,8 @@ import {
   statusLabel,
 } from '../src/services/api';
 
-export default function HomeScreen() {
+function HomeScreen() {
+  useTossHeader();
   const navigation = useNavigation();
   const { userKey, loading: authLoading, error: authError, login } = useAuth();
   const { locations, active, activeId, activeAddress, setActiveId, addSearchedPlace } =
@@ -242,3 +245,7 @@ const styles = StyleSheet.create({
   authError: { marginTop: 12, textAlign: 'center' },
   loginBtn: { marginTop: 24, width: '100%', maxWidth: 280 },
 });
+
+HomeScreen.screenOptions = TOSS_SCREEN_OPTIONS;
+
+export default HomeScreen;

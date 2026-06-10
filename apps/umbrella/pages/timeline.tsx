@@ -19,6 +19,8 @@ import { COLORS } from '../src/components/RelayCard';
 import { Card, SectionHeader } from '../src/components/ui';
 
 import { useLocations, useRelay } from '../src/hooks/useLocations';
+import { useTossHeader } from '../src/hooks/useTossHeader';
+import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
 
 import { sharedStyles, RADIUS, SPACING } from '../src/theme';
 
@@ -52,7 +54,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 
 
-export default function TimelineScreen() {
+function TimelineScreen() {
+  useTossHeader();
 
   const { active } = useLocations();
 
@@ -370,4 +373,7 @@ const styles = StyleSheet.create({
 
 });
 
+TimelineScreen.screenOptions = TOSS_SCREEN_OPTIONS;
+
+export default TimelineScreen;
 
