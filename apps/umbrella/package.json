@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "granite dev",
-    "prebuild": "node scripts/patch-granite-windows.mjs",
+    "prebuild": "node scripts/verify-brand-icon.mjs && node scripts/patch-granite-windows.mjs",
     "build": "ait build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
