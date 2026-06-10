@@ -8,7 +8,7 @@ import {
   upsertUser,
 } from './db/store.js';
 import { buildLiveRelayReport } from './engine/liveRelay.js';
-import { getCached, setCache } from './kma/cache.js';
+import { getCached, getStaleCached, setCache } from './kma/cache.js';
 import { registerLegalRoutes } from './routes/legal.js';
 import { registerCronRoutes } from './routes/cron.js';
 import { registerGeocodeRoutes } from './routes/geocode.js';
@@ -17,6 +17,15 @@ import { registerTossRoutes } from './routes/toss.js';
 import { persistenceMode } from './db/persistence.js';
 import { isApihubConfigured } from './kma/apihub.js';
 import { isMtlsConfigured } from './toss/mtls.js';
+
+/** ~100m — align with app relayKey snap so nearby coords share cache */
+function snapCoord(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function relayCacheKey(lat: number, lng: number): string {
+  return `relay:${snapCoord(lat)}:${snapCoord(lng)}`;
+}
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -47,20 +56,26 @@ export async function buildApp() {
         return reply.status(400).send({ error: 'lat, lng required' });
       }
       try {
-        const cacheKey = `relay:${lat.toFixed(4)}:${lng.toFixed(4)}`;
+        const cacheKey = relayCacheKey(lat, lng);
         const cached = getCached<Awaited<ReturnType<typeof buildLiveRelayReport>>>(cacheKey);
         if (cached) return cached;
 
         const report = await buildLiveRelayReport({
           locationId: 'preview',
           locationName: req.query.name ?? '현재 위치',
-          lat,
-          lng,
+          lat: snapCoord(lat),
+          lng: snapCoord(lng),
         });
         setCache(cacheKey, report);
         return report;
       } catch (e) {
         req.log.error(e);
+        const cacheKey = relayCacheKey(lat, lng);
+        const stale = getStaleCached<Awaited<ReturnType<typeof buildLiveRelayReport>>>(cacheKey);
+        if (stale) {
+          req.log.warn({ cacheKey }, 'relay stale fallback after KMA error');
+          return stale;
+        }
         return reply.status(502).send({
           error: 'KMA fetch failed',
           message: e instanceof Error ? e.message : 'unknown',

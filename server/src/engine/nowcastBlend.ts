@@ -4,6 +4,8 @@ import { FcstSlot, PrecipType, VilageHourly } from '../kma/types.js';
 import { fetchHsrRainGrid, rainRateAt } from '../kma/wthrRadar.js';
 
 const RATE_END_THRESHOLD = 0.05;
+/** MAPLE/HSR below this (mm/h) must not override ultra PTY=none on the timeline */
+const TIMELINE_NOISE_FLOOR = 0.25;
 const POP_END_THRESHOLD = 30;
 
 const NOWCAST_BUDGET_MS = 12_000;
@@ -67,20 +69,44 @@ function rateToType(rate: number): PrecipType {
 export function mergeTimelineWithNowcast(
   fcstTimeline: Array<{ offsetMin: number; rateMmH: number; type: PrecipType }>,
   ctx: NowcastContext,
+  opts?: { precipNow?: boolean; willArrive?: boolean },
 ): Array<{ offsetMin: number; rateMmH: number; type: PrecipType }> {
   const mapleByOffset = new Map(ctx.mapleSlots.map((s) => [s.offsetMin, s.rateMmH]));
+  const precipNow = opts?.precipNow ?? false;
+  const willArrive = opts?.willArrive ?? false;
 
   return fcstTimeline.map((slot) => {
     let rate = slot.rateMmH;
+    const fcstWet = slot.type !== 'none' || slot.rateMmH > 0;
+
     if (slot.offsetMin === 0 && ctx.hsrRateMmH != null) {
-      rate = Math.max(rate, ctx.hsrRateMmH);
+      const hsr = ctx.hsrRateMmH;
+      if (precipNow || fcstWet || hsr >= TIMELINE_NOISE_FLOOR) {
+        rate = Math.max(rate, hsr);
+      }
     }
+
     const mapleRate = mapleByOffset.get(slot.offsetMin);
     if (mapleRate != null) {
-      rate = Math.max(rate, mapleRate);
+      const allowMaple =
+        precipNow ||
+        willArrive ||
+        fcstWet ||
+        mapleRate >= TIMELINE_NOISE_FLOOR;
+      if (allowMaple) {
+        rate = Math.max(rate, mapleRate);
+      }
     }
-    const type = rate > 0.05 ? rateToType(rate) : slot.type;
-    return { offsetMin: slot.offsetMin, rateMmH: Math.round(rate * 10) / 10, type };
+
+    let type = slot.type;
+    if (type === 'none' && rate >= TIMELINE_NOISE_FLOOR) {
+      type = 'rain';
+    } else if (type !== 'none' && rate <= RATE_END_THRESHOLD) {
+      type = slot.type;
+    }
+
+    const displayRate = type === 'none' ? 0 : Math.round(rate * 10) / 10;
+    return { offsetMin: slot.offsetMin, rateMmH: displayRate, type };
   });
 }
 

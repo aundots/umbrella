@@ -29,21 +29,35 @@ export function preloadInterstitial(): void {
 }
 
 export function showInterstitial(onDone?: () => void): void {
-  const done = () => {
+  let settled = false;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
     preloadInterstitial();
     onDone?.();
   };
 
   if (showFullScreenAd.isSupported && !showFullScreenAd.isSupported()) {
-    done();
+    finish();
     return;
   }
 
   const now = Date.now();
   if (!loaded || now - lastShownAt < COOLDOWN_MS) {
-    done();
+    finish();
     return;
   }
+
+  timeout = setTimeout(() => {
+    loaded = false;
+    finish();
+  }, 8000);
 
   try {
     showFullScreenAd({
@@ -52,15 +66,15 @@ export function showInterstitial(onDone?: () => void): void {
         if (event.type === 'dismissed' || event.type === 'failedToShow') {
           loaded = false;
           lastShownAt = Date.now();
-          done();
+          finish();
         }
       },
       onError: () => {
         loaded = false;
-        done();
+        finish();
       },
     });
   } catch {
-    done();
+    finish();
   }
 }

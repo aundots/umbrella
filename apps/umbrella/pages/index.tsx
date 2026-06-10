@@ -1,20 +1,20 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
 import { Button, Txt } from '@toss/tds-react-native';
 import { preloadInterstitial } from '../src/ads/interstitial';
 import { BannerAd } from '../src/ads/BannerAd';
-import { navigateWithAd } from '../src/ads/navigateWithAd';
 import { useAuth } from '../src/auth/AuthContext';
 import { COLORS, MetaLine, RelayCard } from '../src/components/RelayCard';
 import { LocationSearch } from '../src/components/LocationSearch';
-import { Chip, ErrorBanner, IconChip, NavLink } from '../src/components/ui';
+import { Chip, ErrorBanner, NavLink } from '../src/components/ui';
 import { RadarPanel } from '../src/components/RadarPanel';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
 import { sharedStyles, SPACING } from '../src/theme';
@@ -30,7 +30,8 @@ export default function HomeScreen() {
   const { userKey, loading: authLoading, error: authError, login } = useAuth();
   const { locations, active, activeId, activeAddress, setActiveId, addSearchedPlace } =
     useLocations();
-  const { report, loading, error, reload } = useRelay(active);
+  const { report, loading, error, reload } = useRelay();
+  const [radarGesturing, setRadarGesturing] = useState(false);
 
   useEffect(() => {
     if (!report || loading) return;
@@ -86,14 +87,31 @@ export default function HomeScreen() {
       <ScrollView
         style={sharedStyles.screen}
         contentContainerStyle={sharedStyles.content}
+        scrollEnabled={!radarGesturing}
+        nestedScrollEnabled
         refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
       >
-        <Txt typography="t2" fontWeight="bold" color={COLORS.text}>
-          우산챙겨
-        </Txt>
-        <Txt typography="t6" color={COLORS.sub} style={styles.subtitle}>
-          비 언제 오고 언제 그치는지
-        </Txt>
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Txt typography="t2" fontWeight="bold" color={COLORS.text}>
+              우산챙겨
+            </Txt>
+            <Txt typography="t6" color={COLORS.sub} style={styles.subtitle}>
+              비 언제 오고 언제 그치는지
+            </Txt>
+          </View>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => navigation.navigate('/settings')}
+            accessibilityLabel="설정"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+          >
+            <Txt typography="t4" color={COLORS.subDark}>
+              ⚙
+            </Txt>
+          </TouchableOpacity>
+        </View>
         <Txt typography="t6" color={COLORS.text} style={styles.address}>
           📍 {activeAddress}
         </Txt>
@@ -113,11 +131,6 @@ export default function HomeScreen() {
               compact
             />
           ))}
-          <IconChip
-            icon="⚙"
-            onPress={() => navigateWithAd((r) => navigation.navigate(r), '/settings')}
-            accessibilityLabel="설정"
-          />
         </ScrollView>
 
         {error ? (
@@ -212,7 +225,7 @@ export default function HomeScreen() {
 
                 <NavLink
                   label="시간별 중계표 보기"
-                  onPress={() => navigateWithAd((r) => navigation.navigate(r), '/timeline')}
+                  onPress={() => navigation.navigate('/timeline')}
                 />
               </>
             ) : !loading ? (
@@ -225,7 +238,7 @@ export default function HomeScreen() {
           </>
         )}
 
-        <RadarPanel />
+        <RadarPanel onGestureActive={setRadarGesturing} />
         <BannerAd />
       </ScrollView>
     </View>
@@ -233,6 +246,22 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  headerText: { flex: 1, paddingRight: 12 },
+  settingsBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.chipBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
   subtitle: { marginTop: 4, marginBottom: SPACING.section / 2 },
   address: { marginBottom: 16, lineHeight: 22 },
   tabs: { flexDirection: 'row', marginBottom: 20 },

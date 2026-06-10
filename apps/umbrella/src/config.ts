@@ -8,4 +8,4 @@ export const NOTIFICATION_AGREEMENT_TEMPLATE_CODE = 'umbrella_rain_notify';
 export const INTERSTITIAL_AD_GROUP_ID = 'ait.v2.live.939d721863d14423';
 
 /** 앱인토스 콘솔 → 광고 → 이미지형 배너 adGroupId */
-export const BANNER_AD_GROUP_ID = '';
+export const BANNER_AD_GROUP_ID = 'ait.v2.live.ab3885e5a3c04ca3';

@@ -1,4 +1,5 @@
 import { getUltraFcstBaseTime, getUltraNcstBaseTime } from './baseTime.js';
+import { getCached, setCache } from './cache.js';
 import { fetchVilageApi } from './http.js';
 import { latLngToGrid } from './grid.js';
 import { FcstSlot, KmaItem, PTY_MAP, PrecipType } from './types.js';
@@ -9,6 +10,10 @@ async function fetchKma(path: string, params: Record<string, string>): Promise<K
 
 export async function fetchUltraNcst(nx: number, ny: number): Promise<Map<string, string>> {
   const { baseDate, baseTime } = getUltraNcstBaseTime();
+  const cacheKey = `ultra:ncst:${nx}:${ny}:${baseDate}${baseTime}`;
+  const cached = getCached<Map<string, string>>(cacheKey);
+  if (cached) return cached;
+
   const items = await fetchKma('getUltraSrtNcst', {
     base_date: baseDate,
     base_time: baseTime,
@@ -19,11 +24,16 @@ export async function fetchUltraNcst(nx: number, ny: number): Promise<Map<string
   for (const it of items) {
     map.set(it.category, it.obsrValue ?? '');
   }
+  setCache(cacheKey, map);
   return map;
 }
 
 export async function fetchUltraFcst(nx: number, ny: number): Promise<FcstSlot[]> {
   const { baseDate, baseTime } = getUltraFcstBaseTime();
+  const cacheKey = `ultra:fcst:${nx}:${ny}:${baseDate}${baseTime}`;
+  const cached = getCached<FcstSlot[]>(cacheKey);
+  if (cached) return cached;
+
   const items = await fetchKma('getUltraSrtFcst', {
     base_date: baseDate,
     base_time: baseTime,
@@ -65,7 +75,7 @@ export async function fetchUltraFcst(nx: number, ny: number): Promise<FcstSlot[]
     byTime.set(key, slot);
   }
 
-  return [...byTime.entries()]
+  const slots = [...byTime.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, s]) => ({
       at: s.at!,
@@ -78,6 +88,8 @@ export async function fetchUltraFcst(nx: number, ny: number): Promise<FcstSlot[]
       sky: s.sky,
       lgt: s.lgt,
     }));
+  setCache(cacheKey, slots);
+  return slots;
 }
 
 function parseFcstDate(key: string): Date {

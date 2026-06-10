@@ -1,21 +1,26 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
-import { navigateWithAd } from '../src/ads/navigateWithAd';
 import { RadarPanel } from '../src/components/RadarPanel';
 import { BackLink, NavLink } from '../src/components/ui';
 import { sharedStyles } from '../src/theme';
 
 export default function RadarScreen() {
   const navigation = useNavigation();
+  const [radarGesturing, setRadarGesturing] = useState(false);
 
   return (
-    <ScrollView style={sharedStyles.screen} contentContainerStyle={sharedStyles.content}>
+    <ScrollView
+      style={sharedStyles.screen}
+      contentContainerStyle={sharedStyles.content}
+      scrollEnabled={!radarGesturing}
+      nestedScrollEnabled
+    >
       <BackLink onPress={() => navigation.navigate('/')} />
-      <RadarPanel />
+      <RadarPanel onGestureActive={setRadarGesturing} />
       <NavLink
         label="시간별 중계표 보기"
-        onPress={() => navigateWithAd((r) => navigation.navigate(r), '/timeline')}
+        onPress={() => navigation.navigate('/timeline')}
       />
     </ScrollView>
   );

@@ -162,10 +162,13 @@ export async function buildLiveRelayReport(
   let currentType = ncstPrecipType(ncst);
   let currentRate = rn1ToRateMmH(ncstRn1(ncst));
   if (nowcast.hsrRateMmH != null) {
-    currentRate = Math.max(currentRate, nowcast.hsrRateMmH);
-    if (nowcast.hsrRateMmH > 0.05) currentType = 'rain';
+    const hsr = nowcast.hsrRateMmH;
+    if (isPrecipitating(currentType) || hsr >= 0.2) {
+      currentRate = Math.max(currentRate, hsr);
+      if (hsr >= 0.2) currentType = 'rain';
+    }
   }
-  const precipNow = isPrecipitating(currentType) || currentRate > 0.05;
+  const precipNow = isPrecipitating(currentType) || currentRate >= 0.2;
 
   const { arrivalSlot, endSlot, peakRate } = analyzeFcst(now, fcst, currentType);
   const mapleArrival = analyzeNowcastArrival(now, nowcast, precipNow);
@@ -188,7 +191,10 @@ export async function buildLiveRelayReport(
   }
   const blendedPeak = Math.max(peakRate, mapleArrival.peakRate, currentRate);
 
-  const timeline = mergeTimelineWithNowcast(buildTimeline(now, fcst), nowcast);
+  const timeline = mergeTimelineWithNowcast(buildTimeline(now, fcst), nowcast, {
+    precipNow,
+    willArrive,
+  });
   const vilageEnd = analyzeVilageEnd(now, vilageSlots, precipNow);
   let endAt = blendPrecipEnd(now, {
     precipNow,
