@@ -10,10 +10,20 @@ export default defineConfig({
   appName: 'umbrella',
   plugins: [
     appsInToss({
+      appType: 'general',
       brand: {
         displayName: '우산챙겨',
         primaryColor: '#5B9BD5',
         icon: BRAND_ICON_URL,
+      },
+      navigationBar: {
+        withBackButton: true,
+        withHomeButton: true,
+        initialAccessoryButton: {
+          id: 'settings',
+          title: '설정',
+          icon: { name: 'icon-setting-mono' },
+        },
       },
       permissions: [{ name: 'geolocation', access: 'access' }],
     }),

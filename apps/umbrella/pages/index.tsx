@@ -4,7 +4,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
@@ -91,27 +90,6 @@ export default function HomeScreen() {
         nestedScrollEnabled
         refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
       >
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Txt typography="t2" fontWeight="bold" color={COLORS.text}>
-              우산챙겨
-            </Txt>
-            <Txt typography="t6" color={COLORS.sub} style={styles.subtitle}>
-              비 언제 오고 언제 그치는지
-            </Txt>
-          </View>
-          <TouchableOpacity
-            style={styles.settingsBtn}
-            onPress={() => navigation.navigate('/settings')}
-            accessibilityLabel="설정"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            activeOpacity={0.7}
-          >
-            <Txt typography="t4" color={COLORS.subDark}>
-              ⚙
-            </Txt>
-          </TouchableOpacity>
-        </View>
         <Txt typography="t6" color={COLORS.text} style={styles.address}>
           📍 {activeAddress}
         </Txt>
@@ -246,23 +224,6 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  headerText: { flex: 1, paddingRight: 12 },
-  settingsBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.chipBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  subtitle: { marginTop: 4, marginBottom: SPACING.section / 2 },
   address: { marginBottom: 16, lineHeight: 22 },
   tabs: { flexDirection: 'row', marginBottom: 20 },
   value: { marginTop: 4 },

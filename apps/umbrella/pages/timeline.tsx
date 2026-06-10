@@ -12,13 +12,11 @@ import {
 
 } from 'react-native';
 
-import { useNavigation } from '@granite-js/react-native';
-
 import { Txt } from '@toss/tds-react-native';
 
 import { COLORS } from '../src/components/RelayCard';
 
-import { BackLink, Card, SectionHeader } from '../src/components/ui';
+import { Card, SectionHeader } from '../src/components/ui';
 
 import { useLocations, useRelay } from '../src/hooks/useLocations';
 
@@ -56,8 +54,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export default function TimelineScreen() {
 
-  const navigation = useNavigation();
-
   const { active } = useLocations();
 
   const { report, loading, error } = useRelay();
@@ -73,8 +69,6 @@ export default function TimelineScreen() {
   return (
 
     <ScrollView style={sharedStyles.screen} contentContainerStyle={sharedStyles.content}>
-
-      <BackLink onPress={() => navigation.navigate('/')} />
 
       <Txt typography="t2" fontWeight="bold" color={COLORS.text}>
 

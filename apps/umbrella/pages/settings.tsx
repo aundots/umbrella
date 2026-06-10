@@ -7,11 +7,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useNavigation } from '@granite-js/react-native';
 import { Button, ListRow, Switch, TextButton, Txt } from '@toss/tds-react-native';
 import { LocationSearch } from '../src/components/LocationSearch';
 import { COLORS } from '../src/components/RelayCard';
-import { BackLink, Card, Chip, SectionHeader } from '../src/components/ui';
+import { Card, Chip, SectionHeader } from '../src/components/ui';
 import { useAuth } from '../src/auth/AuthContext';
 import { useLocations } from '../src/hooks/useLocations';
 import { sharedStyles, RADIUS } from '../src/theme';
@@ -32,7 +31,6 @@ import { requestRainNotificationAgreement } from '../src/notify/agreement';
 const NAME_PRESETS = ['집', '회사'] as const;
 
 export default function SettingsScreen() {
-  const navigation = useNavigation();
   const { userKey, login } = useAuth();
   const { locations, reload } = useLocations();
   const geo = useGeolocation({
@@ -305,7 +303,6 @@ export default function SettingsScreen() {
       style={sharedStyles.screen}
       contentContainerStyle={sharedStyles.content}
     >
-      <BackLink onPress={() => navigation.navigate('/')} />
       <Txt typography="t2" fontWeight="bold" color={COLORS.text} style={styles.title}>
         설정
       </Txt>
