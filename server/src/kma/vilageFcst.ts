@@ -1,15 +1,11 @@
 import { getVilageFcstBaseTime } from './baseTime.js';
+import { kstStringToDate } from './kst.js';
 import { fetchVilageApi } from './http.js';
 import { pcpToMm } from './labels.js';
 import { PTY_MAP, PrecipType, VilageHourly } from './types.js';
 
 function parseFcstDate(fcstDate: string, fcstTime: string): Date {
-  const y = Number(fcstDate.slice(0, 4));
-  const m = Number(fcstDate.slice(4, 6)) - 1;
-  const d = Number(fcstDate.slice(6, 8));
-  const h = Number(fcstTime.slice(0, 2));
-  const min = Number(fcstTime.slice(2, 4) || '0');
-  return new Date(y, m, d, h, min);
+  return kstStringToDate(fcstDate, fcstTime);
 }
 
 export async function fetchVilageFcst(nx: number, ny: number): Promise<VilageHourly[]> {
@@ -52,6 +48,12 @@ export async function fetchVilageFcst(nx: number, ny: number): Promise<VilageHou
         break;
     }
     byTime.set(key, slot);
+  }
+
+  for (const slot of byTime.values()) {
+    if ((slot.pty ?? 'none') === 'none' && (slot.pcpMm ?? 0) >= 0.1) {
+      slot.pty = 'rain';
+    }
   }
 
   return [...byTime.entries()]

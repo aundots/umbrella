@@ -1,4 +1,6 @@
+import { fetchApihubHsrGrid } from './apihub.js';
 import { getCached, setCache } from './cache.js';
+import { candidateRadarDateTimesKst } from './kst.js';
 import { fetchWithTimeout } from './fetchUtil.js';
 import { getServiceKey } from './http.js';
 import { latLngToRadarGrid, parseGridValues, sampleGridAt } from './radarGrid.js';
@@ -20,20 +22,9 @@ function pad(n: number, len = 2): string {
   return String(n).padStart(len, '0');
 }
 
-/** 레이더 자료는 현재시각 기준 최소 ~20분 전 관측분 */
+/** 레이더 자료는 현재시각 기준 최소 ~20분 전 관측분 (KST) */
 export function candidateRadarDateTimes(now = new Date(), attempts = 6): string[] {
-  const out: string[] = [];
-  const start = new Date(now.getTime() - 20 * 60_000);
-  const d = new Date(start);
-  d.setMinutes(Math.floor(d.getMinutes() / 5) * 5, 0, 0);
-
-  for (let i = 0; i < attempts; i++) {
-    const kst = new Date(d.getTime() - i * 5 * 60_000);
-    out.push(
-      `${kst.getFullYear()}${pad(kst.getMonth() + 1)}${pad(kst.getDate())}${pad(kst.getHours())}${pad(kst.getMinutes())}`,
-    );
-  }
-  return out;
+  return candidateRadarDateTimesKst(now, attempts);
 }
 
 async function fetchRadarGrid(
@@ -104,10 +95,13 @@ export async function fetchHsrRainGrid(): Promise<RadarGridField | null> {
   const cached = getCached<RadarGridField>(cacheKey);
   if (cached) return cached;
 
-  const grid = await fetchWithFallback('getCompCappiQcdAll', {
+  let grid = await fetchWithFallback('getCompCappiQcdAll', {
     compType: 'HSP',
     dataTypeCd: 'RN',
   });
+  if (!grid) {
+    grid = await fetchApihubHsrGrid().catch(() => null);
+  }
   if (grid) setCache(cacheKey, grid);
   return grid;
 }

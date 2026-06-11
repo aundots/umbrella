@@ -1,3 +1,4 @@
+import { candidateRadarDateTimesKst } from './kst.js';
 import { fetchWithTimeout } from './fetchUtil.js';
 import { latLngToRadarGrid, parseGridValues, sampleGridAt } from './radarGrid.js';
 import { getCached, setCache } from './cache.js';
@@ -91,6 +92,29 @@ export async function fetchMapleQpfGrid(
   );
 
   const grid = grids.find((candidate) => candidate != null && candidate.values.length > 0) ?? null;
+  if (grid) setCache(cacheKey, grid);
+  return grid;
+}
+
+export async function fetchApihubHsrGrid(): Promise<RadarGridField | null> {
+  const cacheKey = 'hsr:apihub:comp-cappi';
+  const cached = getCached<RadarGridField>(cacheKey);
+  if (cached) return cached;
+
+  const tries = await Promise.all(
+    candidateRadarDateTimesKst(undefined, 3).map(async (dateTime) => {
+      try {
+        return await fetchApihubGrid('getCompCappiQcdAll', dateTime, {
+          compType: 'HSP',
+          dataTypeCd: 'RN',
+        });
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const grid = tries.find((g) => g != null && g.values.length > 0) ?? null;
   if (grid) setCache(cacheKey, grid);
   return grid;
 }

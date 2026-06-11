@@ -6,7 +6,7 @@ import {
 } from '../kma/client.js';
 import { buildForecastDetail } from '../kma/forecastDetail.js';
 import { fetchVilageFcst } from '../kma/vilageFcst.js';
-import { FcstSlot, ForecastDetail, PrecipType } from '../kma/types.js';
+import { FcstSlot, ForecastDetail, PrecipType, VilageHourly } from '../kma/types.js';
 import {
   analyzeNowcastArrival,
   analyzeVilageEnd,
@@ -15,6 +15,7 @@ import {
   mergeTimelineWithNowcast,
   nowcastConfidenceBoost,
   resolveDataSource,
+  vilageSlotIsWet,
 } from './nowcastBlend.js';
 import {
   applyTerrainAdjust,
@@ -72,6 +73,20 @@ function intensityLabel(rate: number): string {
 
 function minutesUntil(from: Date, to: Date): number {
   return Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
+}
+
+function vilageNowSlot(vilage: VilageHourly[], now: Date): VilageHourly | null {
+  if (vilage.length === 0) return null;
+  let best: VilageHourly | null = null;
+  let bestDelta = Infinity;
+  for (const slot of vilage) {
+    const delta = Math.abs(slot.at.getTime() - now.getTime());
+    if (delta < bestDelta && delta <= 90 * 60_000) {
+      bestDelta = delta;
+      best = slot;
+    }
+  }
+  return best;
 }
 
 function analyzeFcst(now: Date, fcst: FcstSlot[], currentType: PrecipType) {
@@ -168,6 +183,14 @@ export async function buildLiveRelayReport(
       if (hsr >= 0.2) currentType = 'rain';
     }
   }
+
+  const vilageNow = vilageNowSlot(vilageSlots, now);
+  if (vilageNow && vilageSlotIsWet(vilageNow)) {
+    if (vilageNow.pty !== 'none') currentType = vilageNow.pty;
+    else currentType = 'rain';
+    currentRate = Math.max(currentRate, vilageNow.pcpMm);
+  }
+
   const precipNow = isPrecipitating(currentType) || currentRate >= 0.2;
 
   const { arrivalSlot, endSlot, peakRate } = analyzeFcst(now, fcst, currentType);

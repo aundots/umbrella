@@ -13,6 +13,8 @@ import { COLORS } from '../src/components/RelayCard';
 import { Card, Chip, SectionHeader } from '../src/components/ui';
 import { useAuth } from '../src/auth/AuthContext';
 import { useLocations } from '../src/hooks/useLocations';
+import { useNavigationAccessory } from '../src/hooks/useNavigationAccessory';
+import { useScreenContentStyle } from '../src/hooks/useScreenContentStyle';
 import { useTossHeader } from '../src/hooks/useTossHeader';
 import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
 import { sharedStyles, RADIUS } from '../src/theme';
@@ -34,6 +36,8 @@ const NAME_PRESETS = ['집', '회사'] as const;
 
 function SettingsScreen() {
   useTossHeader();
+  useNavigationAccessory();
+  const contentStyle = useScreenContentStyle();
   const { userKey, login } = useAuth();
   const { locations, reload } = useLocations();
   const geo = useGeolocation({
@@ -304,7 +308,7 @@ function SettingsScreen() {
     <ScrollView
       ref={scrollRef}
       style={sharedStyles.screen}
-      contentContainerStyle={sharedStyles.content}
+      contentContainerStyle={contentStyle}
     >
       <Txt typography="t2" fontWeight="bold" color={COLORS.text} style={styles.title}>
         설정

@@ -1,4 +1,5 @@
 import { getUltraFcstBaseTime, getUltraNcstBaseTime } from './baseTime.js';
+import { fcstKeyToDate } from './kst.js';
 import { getCached, setCache } from './cache.js';
 import { fetchVilageApi } from './http.js';
 import { latLngToGrid } from './grid.js';
@@ -93,12 +94,7 @@ export async function fetchUltraFcst(nx: number, ny: number): Promise<FcstSlot[]
 }
 
 function parseFcstDate(key: string): Date {
-  const y = Number(key.slice(0, 4));
-  const m = Number(key.slice(4, 6)) - 1;
-  const d = Number(key.slice(6, 8));
-  const h = Number(key.slice(8, 10));
-  const min = Number(key.slice(10, 12));
-  return new Date(y, m, d, h, min);
+  return fcstKeyToDate(key);
 }
 
 function parseRn1(val: string): number {

@@ -19,6 +19,8 @@ import { COLORS } from '../src/components/RelayCard';
 import { Card, SectionHeader } from '../src/components/ui';
 
 import { useLocations, useRelay } from '../src/hooks/useLocations';
+import { useNavigationAccessory } from '../src/hooks/useNavigationAccessory';
+import { useScreenContentStyle } from '../src/hooks/useScreenContentStyle';
 import { useTossHeader } from '../src/hooks/useTossHeader';
 import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
 
@@ -56,12 +58,12 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function TimelineScreen() {
   useTossHeader();
+  useNavigationAccessory();
 
   const { active } = useLocations();
 
   const { report, loading, error } = useRelay();
-
-
+  const contentStyle = useScreenContentStyle();
 
   const detail = report?.detail;
 
@@ -71,7 +73,7 @@ function TimelineScreen() {
 
   return (
 
-    <ScrollView style={sharedStyles.screen} contentContainerStyle={sharedStyles.content}>
+    <ScrollView style={sharedStyles.screen} contentContainerStyle={contentStyle}>
 
       <Txt typography="t2" fontWeight="bold" color={COLORS.text}>
 

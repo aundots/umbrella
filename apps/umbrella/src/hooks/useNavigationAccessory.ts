@@ -1,14 +1,10 @@
-import { useEffect, useLayoutEffect } from 'react';
 import { useNavigation } from '@granite-js/react-native';
 import { tdsEvent } from '@toss/tds-react-native';
+import { useEffect } from 'react';
 
-/** granite.config navigationBar.initialAccessoryButton 이벤트 처리 */
-export function NavigationSetup() {
+/** granite.config navigationBar.initialAccessoryButton → /settings */
+export function useNavigationAccessory() {
   const navigation = useNavigation();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: true });
-  }, [navigation]);
 
   useEffect(() => {
     return tdsEvent.addEventListener('navigationAccessoryEvent', {
@@ -19,6 +15,4 @@ export function NavigationSetup() {
       },
     });
   }, [navigation]);
-
-  return null;
 }

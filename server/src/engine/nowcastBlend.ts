@@ -155,7 +155,7 @@ function slotIsWet(rateMmH: number, type: PrecipType): boolean {
   return rateMmH > RATE_END_THRESHOLD || type !== 'none';
 }
 
-function vilageSlotIsWet(slot: VilageHourly): boolean {
+export function vilageSlotIsWet(slot: VilageHourly): boolean {
   return (
     slot.pty !== 'none' ||
     (slot.pop ?? 0) >= POP_END_THRESHOLD ||
@@ -238,7 +238,7 @@ function isPrecipitating(type: PrecipType): boolean {
 
 /** Combine ultra, MAPLE, timeline, and vilage into a single end time. */
 export function blendPrecipEnd(now: Date, input: BlendPrecipEndInput): Date | null {
-  if (!input.precipNow) return input.ultraEnd;
+  if (!input.precipNow) return null;
 
   const mapleEnd = analyzeNowcastEnd(now, input.nowcast, input.precipNow);
   const timelineEnd = analyzeTimelineEnd(now, input.timeline, input.precipNow);

@@ -16,8 +16,10 @@ import { LocationSearch } from '../src/components/LocationSearch';
 import { Chip, ErrorBanner, NavLink } from '../src/components/ui';
 import { RadarPanel } from '../src/components/RadarPanel';
 import { useLocations, useRelay } from '../src/hooks/useLocations';
+import { useNavigationAccessory } from '../src/hooks/useNavigationAccessory';
 import { useTossHeader } from '../src/hooks/useTossHeader';
 import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
+import { useAuthGateStyle, useScreenContentStyle } from '../src/hooks/useScreenContentStyle';
 import { sharedStyles, SPACING } from '../src/theme';
 import {
   dataSourceLabel,
@@ -28,12 +30,15 @@ import {
 
 function HomeScreen() {
   useTossHeader();
+  useNavigationAccessory();
   const navigation = useNavigation();
   const { userKey, loading: authLoading, error: authError, login } = useAuth();
   const { locations, active, activeId, activeAddress, setActiveId, addSearchedPlace } =
     useLocations();
   const { report, loading, error, reload } = useRelay();
   const [radarGesturing, setRadarGesturing] = useState(false);
+  const contentStyle = useScreenContentStyle();
+  const authGateStyle = useAuthGateStyle();
 
   useEffect(() => {
     if (!report || loading) return;
@@ -50,7 +55,7 @@ function HomeScreen() {
 
   if (authLoading && !userKey) {
     return (
-      <View style={styles.authGate}>
+      <View style={authGateStyle}>
         <ActivityIndicator size="large" color={COLORS.primary} />
         <Txt typography="t5" fontWeight="semibold" color={COLORS.text} style={styles.authTitle}>
           토스 로그인 연결 중…
@@ -64,7 +69,7 @@ function HomeScreen() {
 
   if (!userKey) {
     return (
-      <View style={styles.authGate}>
+      <View style={authGateStyle}>
         <Txt typography="t3" fontWeight="bold" color={COLORS.text}>
           토스 로그인이 필요해요
         </Txt>
@@ -88,7 +93,7 @@ function HomeScreen() {
     <View style={sharedStyles.screen}>
       <ScrollView
         style={sharedStyles.screen}
-        contentContainerStyle={sharedStyles.content}
+        contentContainerStyle={contentStyle}
         scrollEnabled={!radarGesturing}
         nestedScrollEnabled
         refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
@@ -179,7 +184,7 @@ function HomeScreen() {
                 </RelayCard>
 
                 <RelayCard title="종료" accent={report.end.soon ? COLORS.approaching : COLORS.primary}>
-                  {report.end.at ? (
+                  {report.now.precipitating && report.end.at ? (
                     <>
                       <Txt typography="t4" fontWeight="bold" color={COLORS.text}>
                         {report.end.soon ? '곧 그침 · ' : ''}약 {formatTime(report.end.at)}
@@ -232,13 +237,6 @@ const styles = StyleSheet.create({
   value: { marginTop: 4 },
   footer: { marginTop: 4, gap: 4 },
   loader: { marginTop: 32, marginBottom: 8 },
-  authGate: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: SPACING.screenH,
-  },
   authTitle: { marginTop: 16 },
   authBody: { textAlign: 'center', marginTop: 12, lineHeight: 24 },
   authHint: { marginTop: 12, textAlign: 'center' },

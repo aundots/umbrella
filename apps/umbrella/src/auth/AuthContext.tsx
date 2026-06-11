@@ -79,15 +79,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const stored = await Storage.getItem(STORAGE_KEY);
         if (cancelled) return;
-
-        if (stored) {
-          setUserKey(stored);
-          setLoading(false);
-          return;
-        }
-
-        await login();
+        setUserKey(stored ?? null);
       } catch {
+        if (!cancelled) setUserKey(null);
+      } finally {
         if (!cancelled) setLoading(false);
       }
     })();
@@ -95,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [login]);
+  }, []);
 
   const value = useMemo(
     () => ({ userKey, loading, error, login, clearSession }),

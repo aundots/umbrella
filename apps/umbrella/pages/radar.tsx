@@ -3,19 +3,23 @@ import { ScrollView } from 'react-native';
 import { useNavigation } from '@granite-js/react-native';
 import { RadarPanel } from '../src/components/RadarPanel';
 import { NavLink } from '../src/components/ui';
+import { useNavigationAccessory } from '../src/hooks/useNavigationAccessory';
+import { useScreenContentStyle } from '../src/hooks/useScreenContentStyle';
 import { useTossHeader } from '../src/hooks/useTossHeader';
 import { TOSS_SCREEN_OPTIONS } from '../src/navigation/screenOptions';
 import { sharedStyles } from '../src/theme';
 
 function RadarScreen() {
   useTossHeader();
+  useNavigationAccessory();
   const navigation = useNavigation();
   const [radarGesturing, setRadarGesturing] = useState(false);
+  const contentStyle = useScreenContentStyle();
 
   return (
     <ScrollView
       style={sharedStyles.screen}
-      contentContainerStyle={sharedStyles.content}
+      contentContainerStyle={contentStyle}
       scrollEnabled={!radarGesturing}
       nestedScrollEnabled
     >
