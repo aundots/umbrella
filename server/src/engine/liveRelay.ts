@@ -186,9 +186,15 @@ export async function buildLiveRelayReport(
 
   const vilageNow = vilageNowSlot(vilageSlots, now);
   if (vilageNow && vilageSlotIsWet(vilageNow)) {
-    if (vilageNow.pty !== 'none') currentType = vilageNow.pty;
-    else currentType = 'rain';
-    currentRate = Math.max(currentRate, vilageNow.pcpMm);
+    const ncstDry =
+      !isPrecipitating(ncstPrecipType(ncst)) && ncstRn1(ncst) < 0.1;
+    const hsrDry = nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < 0.2;
+    // Vilage is hourly forecast — do not override dry ultra ncst / HSR observations.
+    if (!(ncstDry && hsrDry)) {
+      if (vilageNow.pty !== 'none') currentType = vilageNow.pty;
+      else currentType = 'rain';
+      currentRate = Math.max(currentRate, vilageNow.pcpMm);
+    }
   }
 
   const precipNow = isPrecipitating(currentType) || currentRate >= 0.2;
