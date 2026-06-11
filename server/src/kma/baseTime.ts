@@ -18,12 +18,19 @@ export function getUltraNcstBaseTime(now = new Date()): { baseDate: string; base
   };
 }
 
+/** 초단기예보는 매시 30·45분경 발표 — 미발표 슬롯 요청 시 NO_DATA */
 export function getUltraFcstBaseTime(now = new Date()): { baseDate: string; baseTime: string } {
   const kst = nowKstParts(now);
-  const minute = kst.minute < 30 ? 0 : 30;
+  const shifted = kstStringToDate(
+    `${kst.year}${pad(kst.month)}${pad(kst.day)}`,
+    `${pad(kst.hour)}${pad(kst.minute)}`,
+  );
+  const lagged = new Date(shifted.getTime() - 35 * 60_000);
+  const parts = nowKstParts(lagged);
+  const minute = parts.minute < 30 ? 0 : 30;
   return {
-    baseDate: `${kst.year}${pad(kst.month)}${pad(kst.day)}`,
-    baseTime: `${pad(kst.hour)}${pad(minute)}`,
+    baseDate: `${parts.year}${pad(parts.month)}${pad(parts.day)}`,
+    baseTime: `${pad(parts.hour)}${pad(minute)}`,
   };
 }
 

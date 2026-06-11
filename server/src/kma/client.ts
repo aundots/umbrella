@@ -1,5 +1,5 @@
 import { getUltraFcstBaseTime, getUltraNcstBaseTime } from './baseTime.js';
-import { fcstKeyToDate } from './kst.js';
+import { fcstKeyToDate, kstStringToDate, nowKstParts } from './kst.js';
 import { getCached, setCache } from './cache.js';
 import { fetchVilageApi } from './http.js';
 import { latLngToGrid } from './grid.js';
@@ -9,13 +9,46 @@ async function fetchKma(path: string, params: Record<string, string>): Promise<K
   return fetchVilageApi(path, params);
 }
 
+function stepBaseTimeBack(baseDate: string, baseTime: string): { baseDate: string; baseTime: string } {
+  const h = Number(baseTime.slice(0, 2));
+  const m = Number(baseTime.slice(2, 4));
+  const totalMin = h * 60 + m - 30;
+  if (totalMin >= 0) {
+    return {
+      baseDate,
+      baseTime: `${String(Math.floor(totalMin / 60)).padStart(2, '0')}${String(totalMin % 60).padStart(2, '0')}`,
+    };
+  }
+  const d = new Date(kstStringToDate(baseDate, baseTime).getTime() - 30 * 60_000);
+  const parts = nowKstParts(d);
+  const minute = parts.minute < 30 ? 0 : 30;
+  return {
+    baseDate: `${parts.year}${String(parts.month).padStart(2, '0')}${String(parts.day).padStart(2, '0')}`,
+    baseTime: `${String(parts.hour).padStart(2, '0')}${String(minute).padStart(2, '0')}`,
+  };
+}
+
+async function fetchKmaWithFallback(
+  path: string,
+  params: Record<string, string>,
+): Promise<KmaItem[]> {
+  try {
+    return await fetchKma(path, params);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '';
+    if (!msg.includes('NO_DATA')) throw e;
+    const prev = stepBaseTimeBack(params.base_date, params.base_time);
+    return fetchKma(path, { ...params, base_date: prev.baseDate, base_time: prev.baseTime });
+  }
+}
+
 export async function fetchUltraNcst(nx: number, ny: number): Promise<Map<string, string>> {
   const { baseDate, baseTime } = getUltraNcstBaseTime();
   const cacheKey = `ultra:ncst:${nx}:${ny}:${baseDate}${baseTime}`;
   const cached = getCached<Map<string, string>>(cacheKey);
   if (cached) return cached;
 
-  const items = await fetchKma('getUltraSrtNcst', {
+  const items = await fetchKmaWithFallback('getUltraSrtNcst', {
     base_date: baseDate,
     base_time: baseTime,
     nx: String(nx),
@@ -35,7 +68,7 @@ export async function fetchUltraFcst(nx: number, ny: number): Promise<FcstSlot[]
   const cached = getCached<FcstSlot[]>(cacheKey);
   if (cached) return cached;
 
-  const items = await fetchKma('getUltraSrtFcst', {
+  const items = await fetchKmaWithFallback('getUltraSrtFcst', {
     base_date: baseDate,
     base_time: baseTime,
     nx: String(nx),
