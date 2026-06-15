@@ -53,7 +53,8 @@ function SettingsScreen() {
     timeInterval: 30_000,
     distanceInterval: 50,
   });
-  const [notify, setNotify] = useState(true);
+  const [notify, setNotify] = useState(false);
+  const [notifyPrefsReady, setNotifyPrefsReady] = useState(false);
   const [beforeMin, setBeforeMin] = useState<30 | 60>(30);
   const [name, setName] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<GeocodePlace | null>(null);
@@ -81,21 +82,23 @@ function SettingsScreen() {
   };
 
   useEffect(() => {
-    getNotifyEnabled().then(setNotify);
-    getNotifyBeforeMin().then(setBeforeMin);
+    Promise.all([getNotifyEnabled(), getNotifyBeforeMin()]).then(([enabled, before]) => {
+      setNotify(enabled);
+      setBeforeMin(before);
+      setNotifyPrefsReady(true);
+    });
   }, []);
+
+  useEffect(() => {
+    if (!userKey || !notifyPrefsReady) return;
+    registerUser(userKey, notify);
+  }, [notify, userKey, notifyPrefsReady]);
 
   const previewCoords = useMemo(() => {
     if (selectedPlace) return { lat: selectedPlace.lat, lng: selectedPlace.lng };
     if (geo) return { lat: geo.coords.latitude, lng: geo.coords.longitude };
     return null;
   }, [selectedPlace, geo]);
-
-  useEffect(() => {
-    if (!userKey) return;
-    registerUser(userKey, notify);
-    void setNotifyEnabled(notify);
-  }, [notify, userKey]);
 
   const onNotifyToggle = (next: boolean) => {
     if (!next) {
@@ -315,7 +318,7 @@ function SettingsScreen() {
     ]);
   };
 
-  const onTestPush = async (kind: 'rain' | 'clear' | 'cancel') => {
+  const onTestPush = async (kind: 'rain' | 'clear') => {
     if (!userKey) {
       Alert.alert('로그인 필요', '토스 로그인 후 테스트할 수 있어요.');
       return;
@@ -327,9 +330,7 @@ function SettingsScreen() {
         '테스트 발송',
         kind === 'clear'
           ? '비 그침 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.'
-          : kind === 'cancel'
-            ? '예보 취소 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.'
-            : '비 예고 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.',
+          : '비 예고 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.',
       );
     } catch (e) {
       Alert.alert(
@@ -356,7 +357,13 @@ function SettingsScreen() {
           contents={
             <ListRow.Texts type="1RowTypeA" top="강수 알림" topProps={{ fontWeight: 'semibold' }} />
           }
-          right={<Switch checked={notify} onCheckedChange={onNotifyToggle} />}
+          right={
+            <Switch
+              checked={notify}
+              disabled={!notifyPrefsReady}
+              onCheckedChange={onNotifyToggle}
+            />
+          }
           verticalPadding="small"
         />
       </Card>
@@ -385,17 +392,6 @@ function SettingsScreen() {
             viewStyle={styles.testBtn}
           >
             비 그침 테스트
-          </Button>
-          <Button
-            size="medium"
-            style="weak"
-            type="primary"
-            display="block"
-            disabled={pushTesting}
-            onPress={() => onTestPush('cancel')}
-            viewStyle={styles.testBtn}
-          >
-            예보 취소 테스트
           </Button>
         </View>
       ) : null}

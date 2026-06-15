@@ -10,6 +10,7 @@ type RequestFn = (params: {
 }) => () => void;
 
 let activeCleanup: (() => void) | null = null;
+let agreementGeneration = 0;
 
 export type AgreementOutcome = 'agreed' | 'rejected' | 'unsupported' | 'error';
 
@@ -21,6 +22,7 @@ function getRequestFn(): RequestFn | null {
 export function requestRainNotificationAgreement(
   onResult: (outcome: AgreementOutcome) => void,
 ): void {
+  const generation = ++agreementGeneration;
   activeCleanup?.();
   activeCleanup = null;
 
@@ -30,21 +32,25 @@ export function requestRainNotificationAgreement(
     return;
   }
 
+  const finish = (outcome: AgreementOutcome) => {
+    if (generation !== agreementGeneration) return;
+    onResult(outcome);
+    activeCleanup?.();
+    activeCleanup = null;
+  };
+
   activeCleanup = requestNotificationAgreement({
     options: { templateCode: NOTIFICATION_AGREEMENT_TEMPLATE_CODE },
     onEvent: ({ type }) => {
       if (type === 'newAgreement' || type === 'alreadyAgreed') {
-        onResult('agreed');
+        finish('agreed');
       } else {
-        onResult('rejected');
+        finish('rejected');
       }
-      activeCleanup?.();
-      activeCleanup = null;
     },
-    onError: () => {
-      onResult('error');
-      activeCleanup?.();
-      activeCleanup = null;
+    onError: (error) => {
+      console.warn('[notify agreement]', error);
+      finish('error');
     },
   });
 }
