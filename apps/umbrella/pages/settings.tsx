@@ -115,7 +115,7 @@ function SettingsScreen() {
       return;
     }
 
-    requestRainNotificationAgreement((outcome) => {
+    requestRainNotificationAgreement((outcome, detail) => {
       if (outcome === 'agreed') {
         setNotify(true);
         void setNotifyEnabled(true);
@@ -131,10 +131,15 @@ function SettingsScreen() {
       } else if (outcome === 'unsupported') {
         Alert.alert(
           '알림 동의 준비 중',
-          '앱 업데이트 후 알림 동의문이 표시돼요. 콘솔에 알림 동의문을 등록했는지 확인해 주세요.',
+          '토스 앱을 최신 버전으로 업데이트한 뒤 다시 시도해 주세요.',
         );
       } else {
-        Alert.alert('오류', '알림 동의 요청에 실패했어요. 잠시 후 다시 시도해 주세요.');
+        Alert.alert(
+          '오류',
+          detail?.trim()
+            ? `알림 동의 요청에 실패했어요.\n(${detail})`
+            : '알림 동의 요청에 실패했어요. 잠시 후 다시 시도해 주세요.',
+        );
       }
     });
   };

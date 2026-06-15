@@ -1,40 +1,45 @@
-import * as Framework from '@apps-in-toss/framework';
+import {
+  isMinVersionSupported,
+  requestNotificationAgreement,
+} from '@apps-in-toss/framework';
 import { NOTIFICATION_AGREEMENT_TEMPLATE_CODE } from '../config';
 
-type NotificationAgreementResult = 'newAgreement' | 'alreadyAgreed' | 'agreementRejected';
-
-type RequestFn = (params: {
-  options: { templateCode: string };
-  onEvent: (result: { type: NotificationAgreementResult }) => void;
-  onError: (error: unknown) => void | Promise<void>;
-}) => () => void;
+const AGREEMENT_MIN_VERSION = { android: '5.255.0', ios: '5.255.0' } as const;
 
 let activeCleanup: (() => void) | null = null;
 let agreementGeneration = 0;
 
 export type AgreementOutcome = 'agreed' | 'rejected' | 'unsupported' | 'error';
 
-function getRequestFn(): RequestFn | null {
-  const fn = (Framework as { requestNotificationAgreement?: RequestFn }).requestNotificationAgreement;
-  return typeof fn === 'function' ? fn : null;
+function errorMessage(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return '';
 }
 
 export function requestRainNotificationAgreement(
-  onResult: (outcome: AgreementOutcome) => void,
+  onResult: (outcome: AgreementOutcome, detail?: string) => void,
 ): void {
   const generation = ++agreementGeneration;
   activeCleanup?.();
   activeCleanup = null;
 
-  const requestNotificationAgreement = getRequestFn();
-  if (!requestNotificationAgreement) {
+  if (typeof requestNotificationAgreement !== 'function') {
     onResult('unsupported');
     return;
   }
 
-  const finish = (outcome: AgreementOutcome) => {
+  if (!isMinVersionSupported(AGREEMENT_MIN_VERSION)) {
+    onResult('unsupported');
+    return;
+  }
+
+  const finish = (outcome: AgreementOutcome, detail?: string) => {
     if (generation !== agreementGeneration) return;
-    onResult(outcome);
+    onResult(outcome, detail);
     activeCleanup?.();
     activeCleanup = null;
   };
@@ -49,8 +54,13 @@ export function requestRainNotificationAgreement(
       }
     },
     onError: (error) => {
+      const msg = errorMessage(error);
       console.warn('[notify agreement]', error);
-      finish('error');
+      if (msg.includes('취소')) {
+        finish('rejected');
+        return;
+      }
+      finish('error', msg || undefined);
     },
   });
 }
