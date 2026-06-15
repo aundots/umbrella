@@ -11,6 +11,7 @@ import {
   analyzeNowcastArrival,
   analyzeVilageEnd,
   blendPrecipEnd,
+  HSR_PRECIP_THRESHOLD,
   loadNowcastContext,
   mergeTimelineWithNowcast,
   nowcastConfidenceBoost,
@@ -178,9 +179,9 @@ export async function buildLiveRelayReport(
   let currentRate = rn1ToRateMmH(ncstRn1(ncst));
   if (nowcast.hsrRateMmH != null) {
     const hsr = nowcast.hsrRateMmH;
-    if (isPrecipitating(currentType) || hsr >= 0.2) {
+    if (isPrecipitating(currentType) || hsr >= HSR_PRECIP_THRESHOLD) {
       currentRate = Math.max(currentRate, hsr);
-      if (hsr >= 0.2) currentType = 'rain';
+      if (hsr >= HSR_PRECIP_THRESHOLD) currentType = 'rain';
     }
   }
 
@@ -188,7 +189,7 @@ export async function buildLiveRelayReport(
   if (vilageNow && vilageSlotIsWet(vilageNow)) {
     const ncstDry =
       !isPrecipitating(ncstPrecipType(ncst)) && ncstRn1(ncst) < 0.1;
-    const hsrDry = nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < 0.2;
+    const hsrDry = nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < HSR_PRECIP_THRESHOLD;
     // Vilage is hourly forecast — do not override dry ultra ncst / HSR observations.
     if (!(ncstDry && hsrDry)) {
       if (vilageNow.pty !== 'none') currentType = vilageNow.pty;
@@ -197,7 +198,7 @@ export async function buildLiveRelayReport(
     }
   }
 
-  const precipNow = isPrecipitating(currentType) || currentRate >= 0.2;
+  const precipNow = isPrecipitating(currentType) || currentRate >= HSR_PRECIP_THRESHOLD;
 
   const { arrivalSlot, endSlot, peakRate } = analyzeFcst(now, fcst, currentType);
   const mapleArrival = analyzeNowcastArrival(now, nowcast, precipNow);

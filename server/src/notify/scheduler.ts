@@ -4,22 +4,35 @@ import { buildLiveRelayReport } from '../engine/liveRelay.js';
 import { isMtlsConfigured } from '../toss/mtls.js';
 import {
   buildPushMsg,
+  buildPushMsgCancel,
   buildPushMsgClear,
   buildPushMsgEndSoon,
   sendFunctionalMessage,
 } from '../toss/messenger.js';
 
-const sent = new Map<string, number>();
-const COOLDOWN_MS = 30 * 60 * 1000;
+type NotifyKind = 'rain' | 'sudden' | 'clear' | 'end_soon' | 'cancel';
+
+const COOLDOWN_BY_KIND: Record<NotifyKind, number> = {
+  rain: 30 * 60_000,
+  sudden: 15 * 60_000,
+  clear: 30 * 60_000,
+  end_soon: 30 * 60_000,
+  cancel: 30 * 60_000,
+};
+
 const END_SOON_LEAD_MIN = 30;
+
+const sentByKind = new Map<NotifyKind, Map<string, number>>();
 
 export interface NotifyScanResult {
   users: number;
   locations: number;
   triggered: number;
   pushed: number;
+  sudden: number;
   endSoon: number;
   cleared: number;
+  cancelled: number;
   skippedCooldown: number;
   errors: number;
   durationMs: number;
@@ -29,8 +42,10 @@ interface LocationScanDelta {
   relayDirty: boolean;
   triggered: number;
   pushed: number;
+  sudden: number;
   endSoon: number;
   cleared: number;
+  cancelled: number;
   skippedCooldown: number;
   errored: boolean;
 }
@@ -39,12 +54,30 @@ function isTossUserKey(userKey: string): boolean {
   return /^\d+$/.test(userKey);
 }
 
+function getSentMap(kind: NotifyKind): Map<string, number> {
+  let map = sentByKind.get(kind);
+  if (!map) {
+    map = new Map();
+    sentByKind.set(kind, map);
+  }
+  return map;
+}
+
+function withinCooldown(kind: NotifyKind, eventKey: string): boolean {
+  const map = getSentMap(kind);
+  return Date.now() - (map.get(eventKey) ?? 0) < COOLDOWN_BY_KIND[kind];
+}
+
+function markSent(kind: NotifyKind, eventKey: string): void {
+  getSentMap(kind).set(eventKey, Date.now());
+}
+
 async function trySendPush(
   userKey: string,
   templateCode: string,
   context: Record<string, string>,
   locName: string,
-  kind: 'rain' | 'clear' | 'end_soon',
+  kind: NotifyKind,
 ): Promise<boolean> {
   if (!isMtlsConfigured() || !isTossUserKey(userKey)) return false;
 
@@ -63,28 +96,23 @@ async function trySendPush(
   return false;
 }
 
-function withinCooldown(eventKey: string): boolean {
-  return Date.now() - (sent.get(eventKey) ?? 0) < COOLDOWN_MS;
-}
-
-function markSent(eventKey: string): void {
-  sent.set(eventKey, Date.now());
-}
-
 async function scanLocation(
   userKey: string,
   loc: SavedLocation,
   rainTemplate: string | undefined,
   clearTemplate: string | undefined,
   endSoonTemplate: string | undefined,
+  cancelTemplate: string | undefined,
   relayPhases: Record<string, RelayPhase>,
 ): Promise<LocationScanDelta> {
   const delta: LocationScanDelta = {
     relayDirty: false,
     triggered: 0,
     pushed: 0,
+    sudden: 0,
     endSoon: 0,
     cleared: 0,
+    cancelled: 0,
     skippedCooldown: 0,
     errored: false,
   };
@@ -108,12 +136,65 @@ async function scanLocation(
       delta.relayDirty = true;
     }
 
-    if (prevStatus === 'live' && currStatus === 'clear' && clearTemplate) {
-      const eventKey = `${stateKey}:clear`;
-      if (withinCooldown(eventKey)) {
+    let rainHandled = false;
+
+    // 1) 갑작스러운 비: clear → live (짧은 쿨다운, 우선 발송)
+    if (prevStatus === 'clear' && currStatus === 'live' && rainTemplate) {
+      const eventKey = `${stateKey}:sudden`;
+      if (withinCooldown('sudden', eventKey)) {
+        delta.skippedCooldown += 1;
+        rainHandled = true;
+      } else {
+        markSent('sudden', eventKey);
+        markSent('rain', `${stateKey}:live:now`);
+        delta.triggered += 1;
+        console.log(`[NOTIFY] user=${userKey} [${loc.name}] sudden_rain`);
+        if (
+          await trySendPush(
+            userKey,
+            rainTemplate,
+            { msg: buildPushMsg(loc.name, report) },
+            loc.name,
+            'sudden',
+          )
+        ) {
+          delta.sudden += 1;
+          delta.pushed += 1;
+          rainHandled = true;
+        }
+      }
+    }
+
+    // 2) 예보 취소: approaching → clear
+    if (prevStatus === 'approaching' && currStatus === 'clear' && cancelTemplate) {
+      const eventKey = `${stateKey}:cancel`;
+      if (withinCooldown('cancel', eventKey)) {
         delta.skippedCooldown += 1;
       } else {
-        markSent(eventKey);
+        markSent('cancel', eventKey);
+        delta.triggered += 1;
+        console.log(`[NOTIFY] user=${userKey} [${loc.name}] forecast_cancel`);
+        if (
+          await trySendPush(
+            userKey,
+            cancelTemplate,
+            { msg: buildPushMsgCancel(loc.name) },
+            loc.name,
+            'cancel',
+          )
+        ) {
+          delta.cancelled += 1;
+        }
+      }
+    }
+
+    // 3) 비 그침: live → clear
+    if (prevStatus === 'live' && currStatus === 'clear' && clearTemplate) {
+      const eventKey = `${stateKey}:clear`;
+      if (withinCooldown('clear', eventKey)) {
+        delta.skippedCooldown += 1;
+      } else {
+        markSent('clear', eventKey);
         delta.triggered += 1;
         console.log(`[NOTIFY] user=${userKey} [${loc.name}] clear`);
         if (
@@ -130,6 +211,7 @@ async function scanLocation(
       }
     }
 
+    // 4) 곧 그침
     const remainingMin = report.end.remainingMinutes;
     const shouldNotifyEndSoon =
       report.end.soon &&
@@ -142,10 +224,10 @@ async function scanLocation(
     if (shouldNotifyEndSoon) {
       const endKey = report.end.at?.slice(0, 16) ?? String(remainingMin);
       const eventKey = `${stateKey}:end_soon:${endKey}`;
-      if (withinCooldown(eventKey)) {
+      if (withinCooldown('end_soon', eventKey)) {
         delta.skippedCooldown += 1;
       } else {
-        markSent(eventKey);
+        markSent('end_soon', eventKey);
         delta.triggered += 1;
         console.log(
           `[NOTIFY] user=${userKey} [${loc.name}] end_soon in=${remainingMin}min`,
@@ -164,21 +246,26 @@ async function scanLocation(
       }
     }
 
+    // 5) 강수 예고 / 도착 (갑작스러운 비는 위에서 처리)
     const shouldNotifyRain =
-      report.now.precipitating ||
-      (report.arrival.willArrive &&
-        report.arrival.inMinutes != null &&
-        report.arrival.inMinutes <= loc.notifyBeforeMin);
+      !rainHandled &&
+      (report.now.precipitating ||
+        (report.arrival.willArrive &&
+          report.arrival.inMinutes != null &&
+          report.arrival.inMinutes <= loc.notifyBeforeMin));
 
     if (!shouldNotifyRain || !rainTemplate) return delta;
 
-    const eventKey = `${stateKey}:${currStatus}:${report.arrival.inMinutes ?? 'now'}`;
-    if (withinCooldown(eventKey)) {
+    const rainEventKey = report.now.precipitating
+      ? `${stateKey}:live:now`
+      : `${stateKey}:approaching:${report.arrival.inMinutes}`;
+
+    if (withinCooldown('rain', rainEventKey)) {
       delta.skippedCooldown += 1;
       return delta;
     }
 
-    markSent(eventKey);
+    markSent('rain', rainEventKey);
     delta.triggered += 1;
     console.log(
       `[NOTIFY] user=${userKey} [${loc.name}] ${currStatus} ` +
@@ -209,6 +296,7 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
   const rainTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE?.trim();
   const clearTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE_CLEAR?.trim();
   const endSoonTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE_END_SOON?.trim();
+  const cancelTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE_CANCEL?.trim();
 
   const targets = await listNotifyTargets();
   const relayPhases = await loadRelayPhases();
@@ -222,7 +310,15 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
 
   const deltas = await Promise.all(
     jobs.map(({ userKey, loc }) =>
-      scanLocation(userKey, loc, rainTemplate, clearTemplate, endSoonTemplate, relayPhases),
+      scanLocation(
+        userKey,
+        loc,
+        rainTemplate,
+        clearTemplate,
+        endSoonTemplate,
+        cancelTemplate,
+        relayPhases,
+      ),
     ),
   );
 
@@ -231,8 +327,10 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
     locations: jobs.length,
     triggered: 0,
     pushed: 0,
+    sudden: 0,
     endSoon: 0,
     cleared: 0,
+    cancelled: 0,
     skippedCooldown: 0,
     errors: 0,
     durationMs: 0,
@@ -242,8 +340,10 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
   for (const delta of deltas) {
     result.triggered += delta.triggered;
     result.pushed += delta.pushed;
+    result.sudden += delta.sudden;
     result.endSoon += delta.endSoon;
     result.cleared += delta.cleared;
+    result.cancelled += delta.cancelled;
     result.skippedCooldown += delta.skippedCooldown;
     if (delta.errored) result.errors += 1;
     if (delta.relayDirty) relayDirty = true;

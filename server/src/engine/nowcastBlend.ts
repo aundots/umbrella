@@ -8,7 +8,9 @@ const RATE_END_THRESHOLD = 0.05;
 const TIMELINE_NOISE_FLOOR = 0.25;
 const POP_END_THRESHOLD = 30;
 
-const NOWCAST_BUDGET_MS = 12_000;
+const NOWCAST_BUDGET_MS = 18_000;
+/** HSR mm/h at or above this → treat as precipitating (500 m radar) */
+export const HSR_PRECIP_THRESHOLD = 0.15;
 
 export interface NowcastContext {
   hsrAvailable: boolean;

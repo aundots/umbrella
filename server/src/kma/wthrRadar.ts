@@ -95,13 +95,17 @@ export async function fetchHsrRainGrid(): Promise<RadarGridField | null> {
   const cached = getCached<RadarGridField>(cacheKey);
   if (cached) return cached;
 
-  let grid = await fetchWithFallback('getCompCappiQcdAll', {
-    compType: 'HSP',
-    dataTypeCd: 'RN',
-  });
-  if (!grid) {
-    grid = await fetchApihubHsrGrid().catch(() => null);
-  }
+  const [datagoGrid, apihubGrid] = await Promise.all([
+    fetchWithFallback(
+      'getCompCappiQcdAll',
+      { compType: 'HSP', dataTypeCd: 'RN' },
+      6,
+    ).catch(() => null),
+    fetchApihubHsrGrid().catch(() => null),
+  ]);
+
+  const grid =
+    [datagoGrid, apihubGrid].find((g) => g != null && g.values.length > 0) ?? null;
   if (grid) setCache(cacheKey, grid);
   return grid;
 }

@@ -280,7 +280,7 @@ function SettingsScreen() {
     ]);
   };
 
-  const onTestPush = async (kind: 'rain' | 'clear') => {
+  const onTestPush = async (kind: 'rain' | 'clear' | 'cancel') => {
     if (!userKey) {
       Alert.alert('로그인 필요', '토스 로그인 후 테스트할 수 있어요.');
       return;
@@ -292,7 +292,9 @@ function SettingsScreen() {
         '테스트 발송',
         kind === 'clear'
           ? '비 그침 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.'
-          : '비 예고 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.',
+          : kind === 'cancel'
+            ? '예보 취소 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.'
+            : '비 예고 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.',
       );
     } catch (e) {
       Alert.alert(
@@ -348,6 +350,17 @@ function SettingsScreen() {
             viewStyle={styles.testBtn}
           >
             비 그침 테스트
+          </Button>
+          <Button
+            size="medium"
+            style="weak"
+            type="primary"
+            display="block"
+            disabled={pushTesting}
+            onPress={() => onTestPush('cancel')}
+            viewStyle={styles.testBtn}
+          >
+            예보 취소 테스트
           </Button>
         </View>
       ) : null}

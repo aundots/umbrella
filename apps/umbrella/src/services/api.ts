@@ -136,7 +136,7 @@ export async function saveLocation(
 
 export async function sendTestPush(
   userKey: string,
-  kind: 'rain' | 'clear' | 'end_soon' = 'rain',
+  kind: 'rain' | 'clear' | 'end_soon' | 'cancel' = 'rain',
 ): Promise<{ resultType?: string; error?: { reason?: string } }> {
   const base = getApiBaseUrl();
   const contextByKind =
@@ -144,7 +144,9 @@ export async function sendTestPush(
       ? { msg: '지금 집에' }
       : kind === 'end_soon'
         ? { msg: '30분 후 집에' }
-        : { msg: '30분 후 집에' };
+        : kind === 'cancel'
+          ? { msg: '양재' }
+          : { msg: '30분 후 집에' };
   const res = await fetch(`${base}/toss/push/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

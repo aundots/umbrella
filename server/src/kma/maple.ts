@@ -7,7 +7,7 @@ export interface MapleForecastSlot {
 }
 
 const LEAD_MINUTES = [10, 20, 30, 40, 50, 60];
-const MAX_BASE_TIME_ATTEMPTS = 2;
+const MAX_BASE_TIME_ATTEMPTS = 4;
 
 export async function fetchMapleAtLocation(
   lat: number,
@@ -17,7 +17,7 @@ export async function fetchMapleAtLocation(
     return { baseTime: null, slots: [] };
   }
 
-  for (const baseTime of candidateRadarDateTimes().slice(0, MAX_BASE_TIME_ATTEMPTS)) {
+  for (const baseTime of candidateRadarDateTimes(undefined, MAX_BASE_TIME_ATTEMPTS)) {
     const leadResults = await Promise.all(
       LEAD_MINUTES.map(async (leadMin) => {
         try {

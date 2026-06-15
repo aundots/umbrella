@@ -12,10 +12,13 @@ export const PUSH_RAIN_SUFFIX = ' 비 와요.';
 export const PUSH_CLEAR_SUFFIX = ' 비 그쳤어요.';
 /** 콘솔 내용: `{{ msg }} 비 곧 그쳐요.` */
 export const PUSH_END_SOON_SUFFIX = ' 비 곧 그쳐요.';
+/** 콘솔 내용: `{{ msg }} 비 예보 취소됐어요.` */
+export const PUSH_CANCEL_SUFFIX = ' 비 예보 취소됐어요.';
 
 const RAIN_MSG_MAX = 25 - PUSH_RAIN_SUFFIX.length;
 const CLEAR_MSG_MAX = 25 - PUSH_CLEAR_SUFFIX.length;
 const END_SOON_MSG_MAX = 25 - PUSH_END_SOON_SUFFIX.length;
+const CANCEL_MSG_MAX = 25 - PUSH_CANCEL_SUFFIX.length;
 
 /** @deprecated PUSH_RAIN_SUFFIX */
 export const PUSH_BODY_SUFFIX = PUSH_RAIN_SUFFIX;
@@ -33,6 +36,11 @@ export const DEFAULT_PUSH_CLEAR_CONTEXT: Record<string, string> = {
 /** 강수 곧 종료 테스트 */
 export const DEFAULT_PUSH_END_SOON_CONTEXT: Record<string, string> = {
   msg: '30분 후 집에',
+};
+
+/** 예보 취소 테스트 */
+export const DEFAULT_PUSH_CANCEL_CONTEXT: Record<string, string> = {
+  msg: '양재',
 };
 
 function truncate(text: string, max: number): string {
@@ -74,6 +82,12 @@ export function buildPushMsgEndSoon(locName: string, remainingMinutes: number): 
   const place = truncate(locName.trim() || '현재 위치', 8);
   const mins = Math.max(1, Math.min(60, Math.round(remainingMinutes)));
   return truncate(`${mins}분 후 ${place}에`, END_SOON_MSG_MAX);
+}
+
+/** 푸시 본문 — `{{ msg }} 비 예보 취소됐어요.` 에 들어갈 앞부분 */
+export function buildPushMsgCancel(locName: string): string {
+  const place = truncate(locName.trim() || '현재 위치', 10);
+  return truncate(place, CANCEL_MSG_MAX);
 }
 
 /** @deprecated buildPushMsg 사용 */

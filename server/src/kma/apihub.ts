@@ -102,7 +102,7 @@ export async function fetchApihubHsrGrid(): Promise<RadarGridField | null> {
   if (cached) return cached;
 
   const tries = await Promise.all(
-    candidateRadarDateTimesKst(undefined, 3).map(async (dateTime) => {
+    candidateRadarDateTimesKst(undefined, 6).map(async (dateTime) => {
       try {
         return await fetchApihubGrid('getCompCappiQcdAll', dateTime, {
           compType: 'HSP',
