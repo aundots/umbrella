@@ -35,5 +35,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: umbrella-ait
-          path: apps/umbrella/*.ait
+          path: umbrella.ait
           if-no-files-found: error

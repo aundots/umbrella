@@ -3,8 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AppsInTossBundle } from '@apps-in-toss/ait-format';
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const aitPath = path.join(root, 'umbrella.ait');
+const appRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.join(appRoot, '..', '..');
+const buildPath = path.join(appRoot, 'umbrella.ait');
+const outPath = path.join(repoRoot, 'umbrella.ait');
+const aitPath = fs.existsSync(buildPath) ? buildPath : outPath;
 
 if (!fs.existsSync(aitPath)) {
   console.warn('[patch-ait-header] umbrella.ait not found, skip');
@@ -70,8 +73,12 @@ if (signature) {
 }
 
 const next = await writer.toBuffer();
-fs.writeFileSync(aitPath, next);
+fs.writeFileSync(outPath, next);
+if (buildPath !== outPath && fs.existsSync(buildPath)) {
+  fs.unlinkSync(buildPath);
+}
 
 const verify = AppsInTossBundle.reader(next);
 console.log(`[patch-ait-header] patched ${changed} bundle file(s)`);
+console.log(`[patch-ait-header] output: ${outPath}`);
 console.log(`[patch-ait-header] deploymentId: ${verify.deploymentId}`);

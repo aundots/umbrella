@@ -172,6 +172,19 @@ export async function registerUser(userKey: string, notifyConsent: boolean): Pro
   });
 }
 
+export interface NotifyConfig {
+  agreementTemplateCode: string;
+  pushTemplateCode: string | null;
+  deploymentId: string | null;
+}
+
+export async function fetchNotifyConfig(): Promise<NotifyConfig> {
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/toss/notify-config`);
+  if (!res.ok) throw new Error('notify-config fetch failed');
+  return res.json() as Promise<NotifyConfig>;
+}
+
 export async function syncCurrentLocation(
   userKey: string,
   body: {

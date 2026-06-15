@@ -21,6 +21,10 @@ function getPushStatus() {
   const endSoonTemplateCode = process.env.TOSS_PUSH_TEMPLATE_CODE_END_SOON?.trim();
   const cancelTemplateCode = process.env.TOSS_PUSH_TEMPLATE_CODE_CANCEL?.trim();
   const deploymentId = process.env.TOSS_DEPLOYMENT_ID?.trim();
+  const agreementTemplateCode =
+    process.env.TOSS_AGREEMENT_TEMPLATE_CODE?.trim() ||
+    templateCode ||
+    'umbrella_rain_alert';
   const mtls = isMtlsConfigured();
   const missing: string[] = [];
 
@@ -40,6 +44,7 @@ function getPushStatus() {
     ready: mtls && Boolean(templateCode) && Boolean(clearTemplateCode) && Boolean(deploymentId),
     db: persistenceMode(),
     mtls,
+    agreementTemplateCode,
     templateConfigured: Boolean(templateCode),
     clearTemplateConfigured: Boolean(clearTemplateCode),
     endSoonTemplateConfigured: Boolean(endSoonTemplateCode),
@@ -80,6 +85,15 @@ export function registerTossRoutes(app: FastifyInstance): void {
   }));
 
   app.get('/toss/push-status', async () => getPushStatus());
+
+  app.get('/toss/notify-config', async () => {
+    const status = getPushStatus();
+    return {
+      agreementTemplateCode: status.agreementTemplateCode,
+      pushTemplateCode: status.templates.rain.code,
+      deploymentId: status.deploymentId,
+    };
+  });
 
   app.post<{ Body: { authorizationCode: string; referrer: string } }>(
     '/toss/auth/session',
