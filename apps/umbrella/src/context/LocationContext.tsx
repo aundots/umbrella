@@ -4,6 +4,8 @@ import { useAuth } from '../auth/AuthContext';
 import { fetchLocations, registerUser, SavedLocation } from '../services/api';
 import { GeocodePlace, reverseGeocode } from '../services/geocode';
 import { snapCoord } from '../location/relayKey';
+import { getNotifyEnabled } from '../notify/prefs';
+import { useCurrentLocationNotifySync } from '../notify/useCurrentLocationNotifySync';
 
 const FALLBACK_CURRENT: SavedLocation = {
   id: 'current',
@@ -82,6 +84,8 @@ function useLocationState() {
     [coords.lat, coords.lng, currentAddress],
   );
 
+  useCurrentLocationNotifySync(coords.lat, coords.lng, coords.ready, currentAddress);
+
   const locations = useMemo(
     () => [current, ...saved, ...sessionPlaces],
     [current, saved, sessionPlaces],
@@ -90,7 +94,8 @@ function useLocationState() {
   const reload = useCallback(async () => {
     if (!userKey) return;
     try {
-      await registerUser(userKey, true);
+      const notifyConsent = await getNotifyEnabled();
+      await registerUser(userKey, notifyConsent);
       const list = await fetchLocations(userKey);
       setSaved(list);
     } catch {

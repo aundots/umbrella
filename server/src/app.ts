@@ -5,6 +5,7 @@ import {
   deleteLocation,
   listLocations,
   updateLocation,
+  upsertCurrentLocation,
   upsertUser,
 } from './db/store.js';
 import { buildLiveRelayReport } from './engine/liveRelay.js';
@@ -115,6 +116,39 @@ export async function buildApp() {
       return upsertUser(String(userKey), Boolean(notifyConsent));
     },
   );
+
+  app.put<{
+    Body: {
+      userKey: string;
+      lat: number;
+      lng: number;
+      address?: string;
+      notifyEnabled?: boolean;
+      notifyBeforeMin?: 30 | 60;
+    };
+  }>('/locations/current', async (req, reply) => {
+    const {
+      userKey,
+      lat,
+      lng,
+      address,
+      notifyEnabled = true,
+      notifyBeforeMin = 30,
+    } = req.body ?? {};
+    if (!userKey || lat == null || lng == null) {
+      return reply.status(400).send({ error: 'userKey, lat, lng required' });
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return reply.status(400).send({ error: 'invalid lat/lng' });
+    }
+    return upsertCurrentLocation(String(userKey), {
+      lat: snapCoord(lat),
+      lng: snapCoord(lng),
+      ...(address?.trim() ? { address: address.trim() } : {}),
+      notifyEnabled: Boolean(notifyEnabled),
+      notifyBeforeMin: notifyBeforeMin === 60 ? 60 : 30,
+    });
+  });
 
   app.get<{ Querystring: { userKey: string } }>('/locations', async (req) => {
     const userKey = req.query.userKey;

@@ -27,10 +27,18 @@ import {
   saveLocation,
   SavedLocation,
   sendTestPush,
+  syncCurrentLocation,
   updateLocationApi,
 } from '../src/services/api';
 import { GeocodePlace, reverseGeocode } from '../src/services/geocode';
 import { requestRainNotificationAgreement } from '../src/notify/agreement';
+import {
+  getNotifyBeforeMin,
+  getNotifyEnabled,
+  setNotifyBeforeMin,
+  setNotifyEnabled,
+} from '../src/notify/prefs';
+import { snapCoord } from '../src/location/relayKey';
 
 const NAME_PRESETS = ['집', '회사'] as const;
 
@@ -59,6 +67,24 @@ function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
+  const pushCurrentLocationSync = async (
+    enabled: boolean,
+    before: 30 | 60 = beforeMin,
+  ) => {
+    if (!userKey || !geo) return;
+    await syncCurrentLocation(userKey, {
+      lat: snapCoord(geo.coords.latitude),
+      lng: snapCoord(geo.coords.longitude),
+      notifyEnabled: enabled,
+      notifyBeforeMin: before,
+    }).catch(() => undefined);
+  };
+
+  useEffect(() => {
+    getNotifyEnabled().then(setNotify);
+    getNotifyBeforeMin().then(setBeforeMin);
+  }, []);
+
   const previewCoords = useMemo(() => {
     if (selectedPlace) return { lat: selectedPlace.lat, lng: selectedPlace.lng };
     if (geo) return { lat: geo.coords.latitude, lng: geo.coords.longitude };
@@ -66,12 +92,16 @@ function SettingsScreen() {
   }, [selectedPlace, geo]);
 
   useEffect(() => {
-    if (userKey) registerUser(userKey, notify);
+    if (!userKey) return;
+    registerUser(userKey, notify);
+    void setNotifyEnabled(notify);
   }, [notify, userKey]);
 
   const onNotifyToggle = (next: boolean) => {
     if (!next) {
       setNotify(false);
+      void setNotifyEnabled(false);
+      void pushCurrentLocationSync(false);
       return;
     }
     if (!userKey) {
@@ -85,6 +115,11 @@ function SettingsScreen() {
     requestRainNotificationAgreement((outcome) => {
       if (outcome === 'agreed') {
         setNotify(true);
+        void setNotifyEnabled(true);
+        if (userKey) {
+          registerUser(userKey, true);
+          void pushCurrentLocationSync(true);
+        }
         return;
       }
       setNotify(false);
@@ -365,14 +400,18 @@ function SettingsScreen() {
         </View>
       ) : null}
 
-      <SectionHeader title="알림 시점" description="선택 위치 기준 강수 가능성" />
+      <SectionHeader title="알림 시점" description="현재 위치·즐겨찾기 기준 강수 가능성" />
       <View style={styles.chipRow}>
         {([30, 60] as const).map((m) => (
           <Chip
             key={m}
             label={chipLabel(m)}
             active={beforeMin === m}
-            onPress={() => setBeforeMin(m)}
+            onPress={() => {
+              setBeforeMin(m);
+              void setNotifyBeforeMin(m);
+              if (notify) void pushCurrentLocationSync(true, m);
+            }}
           />
         ))}
       </View>

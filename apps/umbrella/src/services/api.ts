@@ -172,6 +172,26 @@ export async function registerUser(userKey: string, notifyConsent: boolean): Pro
   });
 }
 
+export async function syncCurrentLocation(
+  userKey: string,
+  body: {
+    lat: number;
+    lng: number;
+    address?: string;
+    notifyEnabled: boolean;
+    notifyBeforeMin: 30 | 60;
+  },
+): Promise<SavedLocation> {
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/locations/current`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userKey, ...body }),
+  });
+  if (!res.ok) throw new Error('sync current location failed');
+  return res.json() as Promise<SavedLocation>;
+}
+
 export async function deleteLocation(userKey: string, id: string): Promise<void> {
   const base = getApiBaseUrl();
   const res = await fetch(

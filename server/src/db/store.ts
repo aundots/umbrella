@@ -48,7 +48,44 @@ export async function upsertUser(userKey: string, notifyConsent: boolean): Promi
 }
 
 export async function listLocations(userKey: string): Promise<SavedLocation[]> {
-  return withDb((db) => db.locations.filter((l) => l.userKey === userKey));
+  return withDb((db) =>
+    db.locations.filter((l) => l.userKey === userKey && !l.isCurrent),
+  );
+}
+
+export async function upsertCurrentLocation(
+  userKey: string,
+  input: {
+    lat: number;
+    lng: number;
+    address?: string;
+    notifyEnabled: boolean;
+    notifyBeforeMin: 30 | 60;
+  },
+): Promise<SavedLocation> {
+  let loc!: SavedLocation;
+  await mutateDb((db) => {
+    const idx = db.locations.findIndex((l) => l.userKey === userKey && l.isCurrent);
+    const next: SavedLocation = {
+      id: '__current__',
+      userKey,
+      name: '현재 위치',
+      lat: input.lat,
+      lng: input.lng,
+      ...(input.address?.trim() ? { address: input.address.trim() } : {}),
+      notifyEnabled: input.notifyEnabled,
+      notifyBeforeMin: input.notifyBeforeMin,
+      isCurrent: true,
+    };
+    if (idx >= 0) {
+      db.locations[idx] = { ...db.locations[idx], ...next };
+      loc = db.locations[idx];
+    } else {
+      loc = next;
+      db.locations.push(loc);
+    }
+  });
+  return loc;
 }
 
 export async function addLocation(
@@ -102,10 +139,14 @@ export async function listNotifyTargets(): Promise<
   Array<{ userKey: string; locations: SavedLocation[] }>
 > {
   const db = await loadDb();
+  const consentUsers = new Set(
+    db.users.filter((u) => u.notifyConsent).map((u) => u.userKey),
+  );
   const byUser = new Map<string, SavedLocation[]>();
 
   for (const loc of db.locations) {
     if (!loc.notifyEnabled) continue;
+    if (!consentUsers.has(loc.userKey)) continue;
     const list = byUser.get(loc.userKey) ?? [];
     list.push(loc);
     byUser.set(loc.userKey, list);
