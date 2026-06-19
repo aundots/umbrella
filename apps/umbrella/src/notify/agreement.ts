@@ -6,25 +6,40 @@ import { fetchNotifyConfig } from '../services/api';
 import { NOTIFICATION_AGREEMENT_TEMPLATE_CODE } from '../config';
 
 const AGREEMENT_MIN_VERSION = { android: '5.255.0', ios: '5.255.0' } as const;
-const FALLBACK_TEMPLATE_CODES = [
-  NOTIFICATION_AGREEMENT_TEMPLATE_CODE,
-  'umbrella_rain_alert',
-  'umbrella_rain_notify',
-] as const;
+const FALLBACK_TEMPLATE_CODES = [NOTIFICATION_AGREEMENT_TEMPLATE_CODE, 'umbrella-_rain_alert', 'umbrella_rain_alert'] as const;
+
+function errorMessage(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const e = error as Record<string, unknown>;
+    if (typeof e.message === 'string' && e.message.trim()) return e.message;
+    if (typeof e.reason === 'string' && e.reason.trim()) return e.reason;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+function consoleChecklist(deploymentId: string | null): string {
+  const idLine = deploymentId
+    ? `3. 앱 출시 → deploymentId ${deploymentId} 선택 → QR로 앱 다시 열기`
+    : '3. 앱 출시 → 최신 .ait 선택 → QR로 앱 다시 열기';
+  return [
+    '토스 콘솔 확인:',
+    '1. 스마트 발송 → 기능성 캠페인 umbrella_rain_alert 검수 승인',
+    '2. 알림동의문 등록 + 캠페인에 연결·승인',
+    idLine,
+  ].join('\n');
+}
 
 let activeCleanup: (() => void) | null = null;
 let agreementGeneration = 0;
 
 export type AgreementOutcome = 'agreed' | 'rejected' | 'unsupported' | 'error';
-
-function errorMessage(error: unknown): string {
-  if (typeof error === 'string') return error;
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return '';
-}
 
 function uniqueCodes(codes: string[]): string[] {
   return [...new Set(codes.map((c) => c.trim()).filter(Boolean))];
@@ -108,10 +123,10 @@ export async function requestRainNotificationAgreement(
           tryCode(index + 1);
           return;
         }
-        const hint = deploymentId
-          ? `\n\n콘솔에 최신 umbrella.ait(deploymentId ${deploymentId}) 업로드 여부를 확인해 주세요.`
-          : '';
-        finish('error', `${msg || '알림 동의에 실패하였습니다.'} (코드: ${tried.join(' → ')})${hint}`);
+        finish(
+          'error',
+          `${msg || '알림 동의에 실패하였습니다.'} (코드: ${tried.join(' → ')})\n\n${consoleChecklist(deploymentId)}`,
+        );
       },
     });
   };

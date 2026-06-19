@@ -18,6 +18,7 @@ import { registerTossRoutes } from './routes/toss.js';
 import { persistenceMode } from './db/persistence.js';
 import { isApihubConfigured } from './kma/apihub.js';
 import { isMtlsConfigured } from './toss/mtls.js';
+import { ackUserNotifyCampaigns } from './notify/campaigns.js';
 
 /** ~100m — align with app relayKey snap so nearby coords share cache */
 function snapCoord(value: number): number {
@@ -213,6 +214,16 @@ export async function buildApp() {
       const ok = await deleteLocation(userKey, req.params.id);
       if (!ok) return reply.status(404).send({ error: 'not found' });
       return { ok: true };
+    },
+  );
+
+  app.post<{ Body: { userKey: string; locationId?: string } }>(
+    '/notify/ack',
+    async (req, reply) => {
+      const { userKey, locationId } = req.body ?? {};
+      if (!userKey) return reply.status(400).send({ error: 'userKey required' });
+      const acked = await ackUserNotifyCampaigns(String(userKey), locationId?.trim() || undefined);
+      return { acked };
     },
   );
 

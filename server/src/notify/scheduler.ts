@@ -1,5 +1,13 @@
 import { listNotifyTargets, type SavedLocation } from '../db/store.js';
-import { loadRelayPhases, saveRelayPhases, type RelayPhase } from '../db/persistence.js';
+import {
+  loadNotifyCampaigns,
+  loadRelayPhases,
+  notifyCampaignKey,
+  saveNotifyCampaigns,
+  saveRelayPhases,
+  type NotifyCampaignStore,
+  type RelayPhase,
+} from '../db/persistence.js';
 import { buildLiveRelayReport } from '../engine/liveRelay.js';
 import { isMtlsConfigured } from '../toss/mtls.js';
 import {
@@ -9,6 +17,13 @@ import {
   buildPushMsgEndSoon,
   sendFunctionalMessage,
 } from '../toss/messenger.js';
+import {
+  clearCampaign,
+  createCampaign,
+  markCampaignSent,
+  planRemind,
+  type RemindAction,
+} from './campaigns.js';
 
 type NotifyKind = 'rain' | 'sudden' | 'clear' | 'end_soon' | 'cancel';
 
@@ -19,6 +34,8 @@ const COOLDOWN_BY_KIND: Record<NotifyKind, number> = {
   end_soon: 30 * 60_000,
   cancel: 30 * 60_000,
 };
+
+/** @deprecated rain/end_soon use ack + 10min remind campaigns instead */
 
 const END_SOON_LEAD_MIN = 30;
 
@@ -34,12 +51,14 @@ export interface NotifyScanResult {
   cleared: number;
   cancelled: number;
   skippedCooldown: number;
+  reminders: number;
   errors: number;
   durationMs: number;
 }
 
 interface LocationScanDelta {
   relayDirty: boolean;
+  campaignsDirty: boolean;
   triggered: number;
   pushed: number;
   sudden: number;
@@ -47,6 +66,7 @@ interface LocationScanDelta {
   cleared: number;
   cancelled: number;
   skippedCooldown: number;
+  reminders: number;
   errored: boolean;
 }
 
@@ -96,6 +116,54 @@ async function trySendPush(
   return false;
 }
 
+async function tickRemindCampaign(
+  campaigns: NotifyCampaignStore,
+  userKey: string,
+  loc: SavedLocation,
+  kind: 'approaching' | 'end_soon',
+  active: boolean,
+  template: string | undefined,
+  buildContext: () => Record<string, string>,
+  logLabel: string,
+  notifyKind: NotifyKind,
+  delta: LocationScanDelta,
+): Promise<boolean> {
+  let dirty = false;
+
+  if (!active || !template) {
+    return clearCampaign(campaigns, userKey, loc.id, kind);
+  }
+
+  const key = notifyCampaignKey(userKey, loc.id, kind);
+  const action: RemindAction = planRemind(campaigns[key]);
+  if (action === 'skip') return false;
+
+  if (action === 'first' && !campaigns[key]) {
+    campaigns[key] = createCampaign(userKey, loc.id, kind);
+    dirty = true;
+  }
+
+  const campaign = campaigns[key];
+  delta.triggered += 1;
+  if (action === 'remind') delta.reminders += 1;
+
+  console.log(
+    `[NOTIFY] user=${userKey} [${loc.name}] ${logLabel}` +
+      (action === 'remind' ? ' remind' : ''),
+  );
+
+  if (
+    await trySendPush(userKey, template, buildContext(), loc.name, notifyKind)
+  ) {
+    markCampaignSent(campaign);
+    delta.pushed += 1;
+    if (kind === 'end_soon') delta.endSoon += 1;
+    dirty = true;
+  }
+
+  return dirty;
+}
+
 async function scanLocation(
   userKey: string,
   loc: SavedLocation,
@@ -104,9 +172,11 @@ async function scanLocation(
   endSoonTemplate: string | undefined,
   cancelTemplate: string | undefined,
   relayPhases: Record<string, RelayPhase>,
+  campaigns: NotifyCampaignStore,
 ): Promise<LocationScanDelta> {
   const delta: LocationScanDelta = {
     relayDirty: false,
+    campaignsDirty: false,
     triggered: 0,
     pushed: 0,
     sudden: 0,
@@ -114,8 +184,11 @@ async function scanLocation(
     cleared: 0,
     cancelled: 0,
     skippedCooldown: 0,
+    reminders: 0,
     errored: false,
   };
+
+  let campaignsDirty = false;
 
   try {
     const report = await buildLiveRelayReport(
@@ -161,12 +234,15 @@ async function scanLocation(
           delta.sudden += 1;
           delta.pushed += 1;
           rainHandled = true;
+          if (clearCampaign(campaigns, userKey, loc.id, 'approaching')) campaignsDirty = true;
         }
       }
     }
 
     // 2) 예보 취소: approaching → clear
     if (prevStatus === 'approaching' && currStatus === 'clear' && cancelTemplate) {
+      if (clearCampaign(campaigns, userKey, loc.id, 'approaching')) campaignsDirty = true;
+
       const eventKey = `${stateKey}:cancel`;
       if (withinCooldown('cancel', eventKey)) {
         delta.skippedCooldown += 1;
@@ -190,6 +266,8 @@ async function scanLocation(
 
     // 3) 비 그침: live → clear
     if (prevStatus === 'live' && currStatus === 'clear' && clearTemplate) {
+      if (clearCampaign(campaigns, userKey, loc.id, 'end_soon')) campaignsDirty = true;
+
       const eventKey = `${stateKey}:clear`;
       if (withinCooldown('clear', eventKey)) {
         delta.skippedCooldown += 1;
@@ -211,83 +289,70 @@ async function scanLocation(
       }
     }
 
-    // 4) 곧 그침
+    // 4) 곧 그침 — 확인 전 10분마다 재발송
     const remainingMin = report.end.remainingMinutes;
     const shouldNotifyEndSoon =
       report.end.soon &&
       report.now.precipitating &&
       remainingMin != null &&
       remainingMin > 0 &&
-      remainingMin <= END_SOON_LEAD_MIN &&
-      endSoonTemplate;
-
-    if (shouldNotifyEndSoon) {
-      const endKey = report.end.at?.slice(0, 16) ?? String(remainingMin);
-      const eventKey = `${stateKey}:end_soon:${endKey}`;
-      if (withinCooldown('end_soon', eventKey)) {
-        delta.skippedCooldown += 1;
-      } else {
-        markSent('end_soon', eventKey);
-        delta.triggered += 1;
-        console.log(
-          `[NOTIFY] user=${userKey} [${loc.name}] end_soon in=${remainingMin}min`,
-        );
-        if (
-          await trySendPush(
-            userKey,
-            endSoonTemplate,
-            { msg: buildPushMsgEndSoon(loc.name, remainingMin) },
-            loc.name,
-            'end_soon',
-          )
-        ) {
-          delta.endSoon += 1;
-        }
-      }
-    }
-
-    // 5) 강수 예고 / 도착 (갑작스러운 비는 위에서 처리)
-    const shouldNotifyRain =
-      !rainHandled &&
-      (report.now.precipitating ||
-        (report.arrival.willArrive &&
-          report.arrival.inMinutes != null &&
-          report.arrival.inMinutes <= loc.notifyBeforeMin));
-
-    if (!shouldNotifyRain || !rainTemplate) return delta;
-
-    const rainEventKey = report.now.precipitating
-      ? `${stateKey}:live:now`
-      : `${stateKey}:approaching:${report.arrival.inMinutes}`;
-
-    if (withinCooldown('rain', rainEventKey)) {
-      delta.skippedCooldown += 1;
-      return delta;
-    }
-
-    markSent('rain', rainEventKey);
-    delta.triggered += 1;
-    console.log(
-      `[NOTIFY] user=${userKey} [${loc.name}] ${currStatus} ` +
-        `in=${report.arrival.inMinutes ?? 0}min peak=${report.arrival.peakRateMmH}mm/h`,
-    );
+      remainingMin <= END_SOON_LEAD_MIN;
 
     if (
-      await trySendPush(
+      await tickRemindCampaign(
+        campaigns,
         userKey,
-        rainTemplate,
-        { msg: buildPushMsg(loc.name, report) },
-        loc.name,
-        'rain',
+        loc,
+        'end_soon',
+        Boolean(shouldNotifyEndSoon),
+        endSoonTemplate,
+        () => ({ msg: buildPushMsgEndSoon(loc.name, remainingMin ?? 0) }),
+        `end_soon in=${remainingMin ?? '?'}min`,
+        'end_soon',
+        delta,
       )
     ) {
-      delta.pushed += 1;
+      campaignsDirty = true;
+    }
+
+    if (currStatus === 'clear' || !report.now.precipitating) {
+      if (clearCampaign(campaigns, userKey, loc.id, 'end_soon')) campaignsDirty = true;
+    }
+
+    // 5) 강수 예고 — 비 시작 전까지, 확인 전 10분마다 재발송
+    const shouldNotifyApproaching =
+      !rainHandled &&
+      !report.now.precipitating &&
+      report.arrival.willArrive &&
+      report.arrival.inMinutes != null &&
+      report.arrival.inMinutes <= loc.notifyBeforeMin;
+
+    if (
+      await tickRemindCampaign(
+        campaigns,
+        userKey,
+        loc,
+        'approaching',
+        Boolean(shouldNotifyApproaching),
+        rainTemplate,
+        () => ({ msg: buildPushMsg(loc.name, report) }),
+        `approaching in=${report.arrival.inMinutes ?? '?'}min peak=${report.arrival.peakRateMmH}mm/h`,
+        'rain',
+        delta,
+      )
+    ) {
+      campaignsDirty = true;
+    }
+
+    if (report.now.precipitating || currStatus === 'live') {
+      if (clearCampaign(campaigns, userKey, loc.id, 'approaching')) campaignsDirty = true;
     }
   } catch (e) {
     delta.errored = true;
     console.error(`[NOTIFY] ${loc.name}`, e);
   }
 
+  delta.campaignsDirty = campaignsDirty;
   return delta;
 }
 
@@ -300,6 +365,7 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
 
   const targets = await listNotifyTargets();
   const relayPhases = await loadRelayPhases();
+  const campaigns = await loadNotifyCampaigns();
 
   const jobs: Array<{ userKey: string; loc: SavedLocation }> = [];
   for (const { userKey, locations } of targets) {
@@ -318,6 +384,7 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
         endSoonTemplate,
         cancelTemplate,
         relayPhases,
+        campaigns,
       ),
     ),
   );
@@ -332,11 +399,13 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
     cleared: 0,
     cancelled: 0,
     skippedCooldown: 0,
+    reminders: 0,
     errors: 0,
     durationMs: 0,
   };
 
   let relayDirty = false;
+  let campaignsDirty = false;
   for (const delta of deltas) {
     result.triggered += delta.triggered;
     result.pushed += delta.pushed;
@@ -345,12 +414,18 @@ export async function runNotifyScan(): Promise<NotifyScanResult> {
     result.cleared += delta.cleared;
     result.cancelled += delta.cancelled;
     result.skippedCooldown += delta.skippedCooldown;
+    result.reminders += delta.reminders;
     if (delta.errored) result.errors += 1;
     if (delta.relayDirty) relayDirty = true;
+    if (delta.campaignsDirty) campaignsDirty = true;
   }
 
   if (relayDirty) {
     await saveRelayPhases(relayPhases);
+  }
+
+  if (campaignsDirty) {
+    await saveNotifyCampaigns(campaigns);
   }
 
   result.durationMs = Date.now() - started;

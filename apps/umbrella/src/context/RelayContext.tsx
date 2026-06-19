@@ -6,8 +6,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { fetchRelay, LiveRelayReport } from '../services/api';
+import { fetchRelay, ackNotifyAlerts, LiveRelayReport } from '../services/api';
 import { coordsForRelay } from '../location/relayKey';
+import { useAuth } from '../auth/AuthContext';
 import { useLocations } from './LocationContext';
 
 const CACHE_TTL_MS = 90_000;
@@ -29,10 +30,22 @@ interface RelayContextValue {
 const RelayContext = createContext<RelayContextValue | null>(null);
 
 export function RelayProvider({ children }: { children: React.ReactNode }) {
+  const { userKey } = useAuth();
   const { active } = useLocations();
   const { lat, lng, key } = coordsForRelay(active);
 
   const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
+  const ackedRef = useRef<string | null>(null);
+
+  const ackAlertsForView = useCallback(() => {
+    if (!userKey) return;
+    const locationId =
+      active.id === 'current' ? '__current__' : active.id.startsWith('session-') ? undefined : active.id;
+    const ackKey = `${userKey}:${locationId ?? '*'}`;
+    if (ackedRef.current === ackKey) return;
+    ackedRef.current = ackKey;
+    void ackNotifyAlerts(userKey, locationId);
+  }, [userKey, active.id]);
   const [report, setReport] = useState<LiveRelayReport | null>(null);
   const [reportKey, setReportKey] = useState('');
   const [loading, setLoading] = useState(true);
@@ -57,6 +70,7 @@ export function RelayProvider({ children }: { children: React.ReactNode }) {
       setReportKey(cacheKey);
       setLoading(false);
       setError(null);
+      ackAlertsForView();
     } else {
       setReport(null);
       setReportKey('');
@@ -71,6 +85,7 @@ export function RelayProvider({ children }: { children: React.ReactNode }) {
         setReport(data);
         setReportKey(cacheKey);
         setError(null);
+        ackAlertsForView();
       })
       .catch((e) => {
         if (cancelled) return;
@@ -97,7 +112,7 @@ export function RelayProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [key, lat, lng, active.name, readCache]);
+  }, [key, lat, lng, active.name, readCache, ackAlertsForView]);
 
   const fetchAndStore = useCallback(
     async (cacheKey: string, silent: boolean) => {
@@ -111,6 +126,7 @@ export function RelayProvider({ children }: { children: React.ReactNode }) {
         setReport(data);
         setReportKey(cacheKey);
         setError(null);
+        ackAlertsForView();
       } catch (e) {
         if (!silent) {
           setError(e instanceof Error ? e.message : '불러오기 실패');
@@ -119,7 +135,7 @@ export function RelayProvider({ children }: { children: React.ReactNode }) {
         if (!silent) setLoading(false);
       }
     },
-    [lat, lng, active.name],
+    [lat, lng, active.name, ackAlertsForView],
   );
 
   const reload = useCallback(async () => {

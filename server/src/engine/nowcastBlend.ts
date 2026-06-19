@@ -83,7 +83,7 @@ export function mergeTimelineWithNowcast(
 
     if (slot.offsetMin === 0 && ctx.hsrRateMmH != null) {
       const hsr = ctx.hsrRateMmH;
-      if (precipNow || fcstWet || hsr >= TIMELINE_NOISE_FLOOR) {
+      if (precipNow || fcstWet || hsr >= HSR_PRECIP_THRESHOLD) {
         rate = Math.max(rate, hsr);
       }
     }
@@ -153,8 +153,54 @@ export function resolveDataSource(ctx: NowcastContext): 'aws' | 'hsr' | 'blended
   return 'fcst';
 }
 
-function slotIsWet(rateMmH: number, type: PrecipType): boolean {
+export function slotIsWet(rateMmH: number, type: PrecipType): boolean {
   return rateMmH > RATE_END_THRESHOLD || type !== 'none';
+}
+
+/** True when the merged timeline's "now" (offset 0) slot shows active precip. */
+export function timelinePrecipitatingNow(
+  timeline: Array<{ offsetMin: number; rateMmH: number; type: PrecipType }>,
+): boolean {
+  const nowSlot = timeline.find((s) => s.offsetMin === 0);
+  if (!nowSlot) return false;
+  return slotIsWet(nowSlot.rateMmH, nowSlot.type);
+}
+
+/** Ultra fcst slot counts as wet when PTY is rain/snow or RN1 implies measurable rate. */
+export function fcstSlotWet(slot: FcstSlot): boolean {
+  return slot.pty !== 'none' || slot.rn1 >= TIMELINE_NOISE_FLOOR;
+}
+
+/** Derive 1h arrival from merged timeline so main UI matches the hourly table. */
+export function deriveArrivalFromTimeline(
+  timeline: Array<{ offsetMin: number; rateMmH: number; type: PrecipType }>,
+  precipNow: boolean,
+): { willArrive: boolean; inMinutes: number | null; type: PrecipType | null; peakRate: number } {
+  if (precipNow || timelinePrecipitatingNow(timeline)) {
+    return { willArrive: false, inMinutes: null, type: null, peakRate: 0 };
+  }
+
+  const wetFuture = timeline.filter(
+    (s) =>
+      s.offsetMin > 0 &&
+      s.offsetMin <= 60 &&
+      slotIsWet(s.rateMmH, s.type),
+  );
+
+  if (wetFuture.length === 0) {
+    return { willArrive: false, inMinutes: null, type: null, peakRate: 0 };
+  }
+
+  const sorted = [...wetFuture].sort((a, b) => a.offsetMin - b.offsetMin);
+  const first = sorted[0];
+  const peakRate = sorted.reduce((m, s) => Math.max(m, s.rateMmH), 0);
+
+  return {
+    willArrive: true,
+    inMinutes: first.offsetMin,
+    type: first.type !== 'none' ? first.type : 'rain',
+    peakRate,
+  };
 }
 
 export function vilageSlotIsWet(slot: VilageHourly): boolean {

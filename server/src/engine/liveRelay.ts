@@ -11,11 +11,14 @@ import {
   analyzeNowcastArrival,
   analyzeVilageEnd,
   blendPrecipEnd,
+  deriveArrivalFromTimeline,
+  fcstSlotWet,
   HSR_PRECIP_THRESHOLD,
   loadNowcastContext,
   mergeTimelineWithNowcast,
   nowcastConfidenceBoost,
   resolveDataSource,
+  timelinePrecipitatingNow,
   vilageSlotIsWet,
 } from './nowcastBlend.js';
 import {
@@ -92,7 +95,7 @@ function vilageNowSlot(vilage: VilageHourly[], now: Date): VilageHourly | null {
 
 function analyzeFcst(now: Date, fcst: FcstSlot[], currentType: PrecipType) {
   const future = fcst.filter((s) => s.at > now);
-  const precipSlots = future.filter((s) => isPrecipitating(s.pty));
+  const precipSlots = future.filter((s) => fcstSlotWet(s));
 
   let arrivalSlot: FcstSlot | null = null;
   if (!isPrecipitating(currentType)) {
@@ -103,7 +106,7 @@ function analyzeFcst(now: Date, fcst: FcstSlot[], currentType: PrecipType) {
   if (isPrecipitating(currentType) || arrivalSlot) {
     let inPrecip = isPrecipitating(currentType);
     for (const s of future) {
-      if (isPrecipitating(s.pty)) {
+      if (fcstSlotWet(s)) {
         inPrecip = true;
       } else if (inPrecip) {
         endSlot = s.at;
@@ -219,15 +222,44 @@ export async function buildLiveRelayReport(
       willArrive = true;
     }
   }
-  const blendedPeak = Math.max(peakRate, mapleArrival.peakRate, currentRate);
+  let blendedPeak = Math.max(peakRate, mapleArrival.peakRate, currentRate);
 
   const timeline = mergeTimelineWithNowcast(buildTimeline(now, fcst), nowcast, {
     precipNow,
     willArrive,
   });
-  const vilageEnd = analyzeVilageEnd(now, vilageSlots, precipNow);
+
+  if (timelinePrecipitatingNow(timeline)) {
+    const nowSlot = timeline.find((s) => s.offsetMin === 0)!;
+    if (!isPrecipitating(currentType)) {
+      currentType = nowSlot.type !== 'none' ? nowSlot.type : 'rain';
+    }
+    currentRate = Math.max(currentRate, nowSlot.rateMmH);
+    willArrive = false;
+    inMinutes = null;
+    arrivalType = null;
+  }
+  const precipNowFinal =
+    isPrecipitating(currentType) ||
+    currentRate >= HSR_PRECIP_THRESHOLD ||
+    timelinePrecipitatingNow(timeline);
+
+  const timelineArrival = deriveArrivalFromTimeline(timeline, precipNowFinal);
+  if (timelineArrival.willArrive) {
+    if (
+      inMinutes == null ||
+      (timelineArrival.inMinutes != null && timelineArrival.inMinutes < inMinutes)
+    ) {
+      inMinutes = timelineArrival.inMinutes;
+      arrivalType = timelineArrival.type;
+    }
+    willArrive = true;
+    blendedPeak = Math.max(blendedPeak, timelineArrival.peakRate);
+  }
+
+  const vilageEnd = analyzeVilageEnd(now, vilageSlots, precipNowFinal);
   let endAt = blendPrecipEnd(now, {
-    precipNow,
+    precipNow: precipNowFinal,
     ultraEnd: endSlot,
     nowcast,
     timeline,
@@ -238,6 +270,11 @@ export async function buildLiveRelayReport(
   const windDeg = getWindFromFcst(fcst);
   const terrain = computeTerrainContext(params.lat, params.lng, windDeg, null);
 
+  if (precipNowFinal) {
+    willArrive = false;
+    inMinutes = null;
+  }
+
   const adjusted = applyTerrainAdjust(
     terrain,
     blendedPeak,
@@ -247,7 +284,7 @@ export async function buildLiveRelayReport(
   );
 
   let relayStatus: LiveRelayReport['relayStatus'] = 'clear';
-  if (precipNow) relayStatus = 'live';
+  if (precipNowFinal) relayStatus = 'live';
   else if (adjusted.willArrive) relayStatus = 'approaching';
 
   const confidence = Math.min(
@@ -260,28 +297,31 @@ export async function buildLiveRelayReport(
 
   const remainingMinutes = adjusted.endAt ? minutesUntil(now, adjusted.endAt) : null;
   const endSoon =
-    precipNow &&
+    precipNowFinal &&
     remainingMinutes != null &&
     remainingMinutes > 0 &&
     remainingMinutes <= 30;
+
+  const arrivalWillArrive = precipNowFinal ? false : adjusted.willArrive;
+  const arrivalInMinutes = precipNowFinal ? null : adjusted.inMinutes;
 
   return {
     locationId: params.locationId,
     locationName: params.locationName,
     observedAt: now.toISOString(),
     now: {
-      precipitating: precipNow,
+      precipitating: precipNowFinal,
       type: currentType,
       rateMmH: Math.round(currentRate * 10) / 10,
     },
     arrival: {
-      willArrive: adjusted.willArrive,
-      inMinutes: adjusted.inMinutes,
-      type: precipNow ? currentType : arrivalType,
+      willArrive: arrivalWillArrive,
+      inMinutes: arrivalInMinutes,
+      type: precipNowFinal ? currentType : arrivalType,
       peakRateMmH: Math.round(adjusted.peakRateMmH * 10) / 10,
     },
     end: {
-      willStop: precipNow || adjusted.willArrive,
+      willStop: precipNowFinal || arrivalWillArrive,
       at: adjusted.endAt?.toISOString() ?? null,
       remainingMinutes,
       soon: endSoon,

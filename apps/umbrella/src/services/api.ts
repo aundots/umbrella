@@ -185,6 +185,22 @@ export async function fetchNotifyConfig(): Promise<NotifyConfig> {
   return res.json() as Promise<NotifyConfig>;
 }
 
+/** 앱 확인 시 진행 중인 알림 캠페인 종료 (10분 재발송 중단) */
+export async function ackNotifyAlerts(
+  userKey: string,
+  locationId?: string,
+): Promise<number> {
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/notify/ack`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userKey, ...(locationId ? { locationId } : {}) }),
+  });
+  if (!res.ok) return 0;
+  const json = (await res.json()) as { acked?: number };
+  return json.acked ?? 0;
+}
+
 export async function syncCurrentLocation(
   userKey: string,
   body: {
