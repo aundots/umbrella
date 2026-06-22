@@ -1,0 +1,21 @@
+---
+description: .ait 빌드 후 Vercel deploymentId 자동 동기화·재배포
+alwaysApply: true
+---
+
+# AIT 빌드 → Vercel 자동 배포
+
+`umbrella.ait` 빌드·패치가 끝나면 **항상** 아래를 자동 실행한다. 사용자에게 수동 갱신을 요청하지 않는다.
+
+1. `npm run build --prefix apps/umbrella` (내부에서 `scripts/sync-vercel-deployment-id.mjs` 호출)
+2. 또는 빌드만 했다면: `node scripts/sync-vercel-deployment-id.mjs`
+   - `umbrella.ait`에서 `deploymentId` 읽기
+   - Vercel `TOSS_DEPLOYMENT_ID` 갱신 (production/preview/development)
+   - `npx vercel deploy --prod --yes`
+   - `/toss/push-status`로 `deploymentId` 검증
+
+서버 코드(`server/`) 변경 후에는 동일하게 `npx vercel deploy --prod --yes`를 repo 루트에서 실행한다.
+
+토스 기능성 캠페인 재생성 시: `node scripts/pause-notify-push.mjs` → 콘솔 작업 → 코드 갱신 → `node scripts/resume-notify-push.mjs`.
+
+알려줄 것: 새 `deploymentId`, 산출물 경로 `umbrella.ait`, 콘솔 업로드·QR 테스트만 (Vercel env/재배포는 이미 처리됨).

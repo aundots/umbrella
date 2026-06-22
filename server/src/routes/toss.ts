@@ -11,9 +11,12 @@ import {
   DEFAULT_PUSH_CLEAR_CONTEXT,
   DEFAULT_PUSH_CONTEXT,
   DEFAULT_PUSH_END_SOON_CONTEXT,
+  formatDeliveryError,
+  parseSendDelivery,
   sendFunctionalMessage,
   sendTestFunctionalMessage,
 } from '../toss/messenger.js';
+import { isNotifyPushEnabled, NOTIFY_PUSH_PAUSED_REASON } from '../notify/pushGate.js';
 
 function getPushStatus() {
   const templateCode = process.env.TOSS_PUSH_TEMPLATE_CODE?.trim();
@@ -22,9 +25,7 @@ function getPushStatus() {
   const cancelTemplateCode = process.env.TOSS_PUSH_TEMPLATE_CODE_CANCEL?.trim();
   const deploymentId = process.env.TOSS_DEPLOYMENT_ID?.trim();
   const agreementTemplateCode =
-    process.env.TOSS_AGREEMENT_TEMPLATE_CODE?.trim() ||
-    templateCode ||
-    'umbrella_rain_alert';
+    process.env.TOSS_AGREEMENT_TEMPLATE_CODE?.trim() || templateCode || null;
   const mtls = isMtlsConfigured();
   const missing: string[] = [];
 
@@ -51,6 +52,7 @@ function getPushStatus() {
     cancelTemplateConfigured: Boolean(cancelTemplateCode),
     deploymentIdConfigured: Boolean(deploymentId),
     deploymentId: deploymentId ?? null,
+    pushEnabled: isNotifyPushEnabled(),
     templates: {
       rain: {
         code: templateCode ?? null,
@@ -88,10 +90,18 @@ export function registerTossRoutes(app: FastifyInstance): void {
 
   app.get('/toss/notify-config', async () => {
     const status = getPushStatus();
+    const pushCode = status.templates.rain.code;
     return {
       agreementTemplateCode: status.agreementTemplateCode,
-      pushTemplateCode: status.templates.rain.code,
+      pushTemplateCode: pushCode,
       deploymentId: status.deploymentId,
+      agreementConfigured: Boolean(status.agreementTemplateCode),
+      pushEnabled: status.pushEnabled,
+      templates: {
+        rain: pushCode,
+        clear: status.templates.clear.code,
+        endSoon: status.templates.endSoon.code,
+      },
     };
   });
 
@@ -189,6 +199,12 @@ export function registerTossRoutes(app: FastifyInstance): void {
   app.post<{
     Body: { userKey: string; templateSetCode?: string; context?: Record<string, string> };
   }>('/toss/push/send', async (req, reply) => {
+    if (!isNotifyPushEnabled()) {
+      return reply.status(503).send({
+        error: 'notify_push_paused',
+        message: NOTIFY_PUSH_PAUSED_REASON,
+      });
+    }
     const { userKey, templateSetCode, context } = req.body ?? {};
     const template = templateSetCode ?? process.env.TOSS_PUSH_TEMPLATE_CODE;
     if (!userKey || !template) {
@@ -220,6 +236,12 @@ export function registerTossRoutes(app: FastifyInstance): void {
       context?: Record<string, string>;
     };
   }>('/toss/push/test', async (req, reply) => {
+      if (!isNotifyPushEnabled()) {
+        return reply.status(503).send({
+          error: 'notify_push_paused',
+          message: NOTIFY_PUSH_PAUSED_REASON,
+        });
+      }
       const { userKey, kind = 'rain', templateSetCode, deploymentId, context } = req.body ?? {};
       const template =
         templateSetCode ??
@@ -249,6 +271,16 @@ export function registerTossRoutes(app: FastifyInstance): void {
           deploymentId,
           context: { ...defaults, ...context },
         });
+        const delivery = parseSendDelivery(data);
+        const deliveryError = formatDeliveryError(delivery);
+        if (deliveryError) {
+          return reply.status(422).send({
+            resultType: 'FAIL',
+            error: { reason: deliveryError },
+            success: data.success,
+            delivery,
+          });
+        }
         return reply.status(status).send(data);
       } catch (e) {
         req.log.error(e);

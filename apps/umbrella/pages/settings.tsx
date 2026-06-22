@@ -1,5 +1,5 @@
 import { Accuracy, useGeolocation } from '@apps-in-toss/framework';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -33,12 +33,22 @@ import {
 import { GeocodePlace, reverseGeocode } from '../src/services/geocode';
 import { requestRainNotificationAgreement } from '../src/notify/agreement';
 import {
+  formatNotifyConnectError,
+  NOTIFY_PERMISSION_STEPS,
+} from '../src/notify/connectHelp';
+import {
   getNotifyBeforeMin,
   getNotifyEnabled,
   setNotifyBeforeMin,
   setNotifyEnabled,
 } from '../src/notify/prefs';
 import { snapCoord } from '../src/location/relayKey';
+
+function useReloadOnScreenFocus(reload: () => void): void {
+  useEffect(() => {
+    reload();
+  }, [reload]);
+}
 
 const NAME_PRESETS = ['집', '회사'] as const;
 
@@ -68,6 +78,16 @@ function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
+  const reloadNotifyPrefs = useCallback(() => {
+    void Promise.all([getNotifyEnabled(), getNotifyBeforeMin()]).then(([enabled, before]) => {
+      setNotify(enabled);
+      setBeforeMin(before);
+      setNotifyPrefsReady(true);
+    });
+  }, []);
+
+  useReloadOnScreenFocus(reloadNotifyPrefs);
+
   const pushCurrentLocationSync = async (
     enabled: boolean,
     before: 30 | 60 = beforeMin,
@@ -82,14 +102,6 @@ function SettingsScreen() {
   };
 
   useEffect(() => {
-    Promise.all([getNotifyEnabled(), getNotifyBeforeMin()]).then(([enabled, before]) => {
-      setNotify(enabled);
-      setBeforeMin(before);
-      setNotifyPrefsReady(true);
-    });
-  }, []);
-
-  useEffect(() => {
     if (!userKey || !notifyPrefsReady) return;
     registerUser(userKey, notify);
   }, [notify, userKey, notifyPrefsReady]);
@@ -99,6 +111,74 @@ function SettingsScreen() {
     if (geo) return { lat: geo.coords.latitude, lng: geo.coords.longitude };
     return null;
   }, [selectedPlace, geo]);
+
+  const completeNotifyEnable = async () => {
+    if (!userKey) return;
+    try {
+      setNotify(true);
+      await setNotifyEnabled(true);
+      registerUser(userKey, true);
+      await pushCurrentLocationSync(true);
+      Alert.alert(
+        '완료',
+        '강수 알림이 켜졌어요. 비 소식이 있으면 알려드릴게요.\n\n알림이 안 오면 토스 [전체 → 검색 → "사용자 최적화 동의"]가 켜져 있는지 확인해 주세요.',
+      );
+    } catch {
+      setNotify(false);
+      await setNotifyEnabled(false);
+      await pushCurrentLocationSync(false);
+      Alert.alert('오류', '설정 저장에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  };
+
+  const runAgreementFlow = (afterAgree: () => void) => {
+    Alert.alert(
+      '알림 연결',
+      `강수 알림을 받으려면 아래가 모두 필요해요.\n\n${NOTIFY_PERMISSION_STEPS}\n\n특히 ①「사용자 최적화 동의」가 꺼져 있으면 알림이 오지 않아요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '동의하기', onPress: afterAgree },
+      ],
+    );
+  };
+
+  const handleAgreementOutcome = (
+    outcome: 'agreed' | 'alreadyAgreed' | 'rejected' | 'unsupported' | 'error',
+    detail?: string,
+  ) => {
+    if (outcome === 'agreed' || outcome === 'alreadyAgreed') {
+      void completeNotifyEnable();
+      return;
+    }
+    void getNotifyEnabled().then((enabled) => setNotify(enabled));
+    if (outcome === 'rejected') {
+      Alert.alert('알림 미동의', '강수 알림을 받으려면 동의가 필요해요.');
+    } else if (outcome === 'unsupported') {
+      Alert.alert(
+        '알림 동의 준비 중',
+        '토스 앱을 최신 버전으로 업데이트한 뒤 다시 시도해 주세요.',
+      );
+    } else {
+      Alert.alert(
+        '오류',
+        detail?.trim()
+          ? `알림 동의 요청에 실패했어요.\n(${detail})`
+          : '알림 동의 요청에 실패했어요. 잠시 후 다시 시도해 주세요.',
+      );
+    }
+  };
+
+  const onReAgreeNotify = () => {
+    if (!userKey) {
+      Alert.alert('로그인 필요', '토스 로그인 후 다시 시도해 주세요.');
+      return;
+    }
+    runAgreementFlow(() => {
+      requestRainNotificationAgreement((outcome, detail) =>
+        handleAgreementOutcome(outcome, detail),
+      );
+    });
+  };
 
   const onNotifyToggle = (next: boolean) => {
     if (!next) {
@@ -115,32 +195,10 @@ function SettingsScreen() {
       return;
     }
 
-    requestRainNotificationAgreement((outcome, detail) => {
-      if (outcome === 'agreed') {
-        setNotify(true);
-        void setNotifyEnabled(true);
-        if (userKey) {
-          registerUser(userKey, true);
-          void pushCurrentLocationSync(true);
-        }
-        return;
-      }
-      setNotify(false);
-      if (outcome === 'rejected') {
-        Alert.alert('알림 미동의', '강수 알림을 받으려면 동의가 필요해요.');
-      } else if (outcome === 'unsupported') {
-        Alert.alert(
-          '알림 동의 준비 중',
-          '토스 앱을 최신 버전으로 업데이트한 뒤 다시 시도해 주세요.',
-        );
-      } else {
-        Alert.alert(
-          '오류',
-          detail?.trim()
-            ? `알림 동의 요청에 실패했어요.\n(${detail})`
-            : '알림 동의 요청에 실패했어요. 잠시 후 다시 시도해 주세요.',
-        );
-      }
+    runAgreementFlow(() => {
+      requestRainNotificationAgreement((outcome, detail) =>
+        handleAgreementOutcome(outcome, detail),
+      );
     });
   };
 
@@ -338,10 +396,11 @@ function SettingsScreen() {
           : '비 예고 테스트 요청을 보냈어요. 토스 앱 알림을 확인해 주세요.',
       );
     } catch (e) {
-      Alert.alert(
-        '테스트 실패',
-        e instanceof Error ? e.message : '템플릿 승인·TOSS_PUSH_TEMPLATE_CODE 설정을 확인해 주세요.',
-      );
+      const raw = e instanceof Error ? e.message : '템플릿 승인·서버 설정을 확인해 주세요.';
+      const msg = /워크스페이스|workspace|구성원/i.test(raw)
+        ? '테스트 발송은 워크스페이스 구성원만 받을 수 있어요. (토스 정책)\n실제 강수 알림은 출시 후 모든 사용자에게 자동 전송돼요.'
+        : formatNotifyConnectError(raw);
+      Alert.alert('테스트 안내', msg);
     } finally {
       setPushTesting(false);
     }
@@ -372,6 +431,18 @@ function SettingsScreen() {
           verticalPadding="small"
         />
       </Card>
+
+      {notify && userKey ? (
+        <TextButton
+          typography="t6"
+          fontWeight="semibold"
+          color={COLORS.primary}
+          onPress={onReAgreeNotify}
+          style={styles.reAgreeBtn}
+        >
+          토스 알림 동의 다시하기
+        </TextButton>
+      ) : null}
 
       {userKey ? (
         <View style={styles.testRow}>
@@ -613,6 +684,7 @@ function SettingsScreen() {
 const styles = StyleSheet.create({
   title: { marginBottom: 20 },
   notifyCard: { paddingVertical: 4, paddingHorizontal: 0, marginBottom: 12 },
+  reAgreeBtn: { alignSelf: 'flex-start', marginBottom: 12 },
   testRow: { gap: 8, marginBottom: 8 },
   testBtn: { flex: 1 },
   chipRow: {

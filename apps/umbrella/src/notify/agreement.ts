@@ -6,7 +6,6 @@ import { fetchNotifyConfig } from '../services/api';
 import { NOTIFICATION_AGREEMENT_TEMPLATE_CODE } from '../config';
 
 const AGREEMENT_MIN_VERSION = { android: '5.255.0', ios: '5.255.0' } as const;
-const FALLBACK_TEMPLATE_CODES = [NOTIFICATION_AGREEMENT_TEMPLATE_CODE, 'umbrella-_rain_alert', 'umbrella_rain_alert'] as const;
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'string') return error;
@@ -24,14 +23,14 @@ function errorMessage(error: unknown): string {
   return '';
 }
 
-function consoleChecklist(deploymentId: string | null): string {
+function consoleChecklist(deploymentId: string | null, templateCode: string): string {
   const idLine = deploymentId
     ? `3. 앱 출시 → deploymentId ${deploymentId} 선택 → QR로 앱 다시 열기`
     : '3. 앱 출시 → 최신 .ait 선택 → QR로 앱 다시 열기';
   return [
     '토스 콘솔 확인:',
-    '1. 스마트 발송 → 기능성 캠페인 umbrella_rain_alert 검수 승인',
-    '2. 알림동의문 등록 + 캠페인에 연결·승인',
+    `1. 기능성 캠페인 발송 코드 ${templateCode} 검수 승인`,
+    '2. 알림 동의문(2260)이 위 캠페인에 연결·승인',
     idLine,
   ].join('\n');
 }
@@ -39,7 +38,12 @@ function consoleChecklist(deploymentId: string | null): string {
 let activeCleanup: (() => void) | null = null;
 let agreementGeneration = 0;
 
-export type AgreementOutcome = 'agreed' | 'rejected' | 'unsupported' | 'error';
+export type AgreementOutcome =
+  | 'agreed'
+  | 'alreadyAgreed'
+  | 'rejected'
+  | 'unsupported'
+  | 'error';
 
 function uniqueCodes(codes: string[]): string[] {
   return [...new Set(codes.map((c) => c.trim()).filter(Boolean))];
@@ -63,38 +67,42 @@ export async function requestRainNotificationAgreement(
   }
 
   let deploymentId: string | null = null;
-  let templateCodes = [...FALLBACK_TEMPLATE_CODES];
+  let templateCodes = [NOTIFICATION_AGREEMENT_TEMPLATE_CODE, 'umbrella-_rain_alert'];
+
   try {
     const cfg = await fetchNotifyConfig();
     deploymentId = cfg.deploymentId;
     templateCodes = uniqueCodes([
-      cfg.pushTemplateCode,
-      cfg.agreementTemplateCode,
-      ...FALLBACK_TEMPLATE_CODES,
+      cfg.agreementTemplateCode ?? '',
+      cfg.pushTemplateCode ?? '',
+      NOTIFICATION_AGREEMENT_TEMPLATE_CODE,
+      'umbrella-_rain_alert',
     ]);
   } catch {
-    templateCodes = uniqueCodes([...FALLBACK_TEMPLATE_CODES]);
+    templateCodes = uniqueCodes(templateCodes);
   }
 
+  if (templateCodes.length === 0) {
+    onResult('error', '알림 템플릿 코드를 불러오지 못했어요.');
+    return;
+  }
+
+  const tried: string[] = [];
+  let settled = false;
+
   const finish = (outcome: AgreementOutcome, detail?: string) => {
-    if (generation !== agreementGeneration) return;
+    if (generation !== agreementGeneration || settled) return;
+    settled = true;
     onResult(outcome, detail);
     activeCleanup?.();
     activeCleanup = null;
   };
 
-  const tried: string[] = [];
-
   const tryCode = (index: number): void => {
-    if (generation !== agreementGeneration) return;
+    if (generation !== agreementGeneration || settled) return;
     const templateCode = templateCodes[index];
     if (!templateCode) {
-      finish(
-        'error',
-        deploymentId
-          ? `동의 코드를 찾지 못했어요. 콘솔에 최신 .ait(deploymentId ${deploymentId})를 업로드했는지 확인해 주세요.`
-          : '동의 코드를 찾지 못했어요.',
-      );
+      finish('error', '동의 코드를 찾지 못했어요.');
       return;
     }
 
@@ -102,8 +110,10 @@ export async function requestRainNotificationAgreement(
     activeCleanup = requestNotificationAgreement({
       options: { templateCode },
       onEvent: ({ type }) => {
-        if (type === 'newAgreement' || type === 'alreadyAgreed') {
+        if (type === 'newAgreement') {
           finish('agreed');
+        } else if (type === 'alreadyAgreed') {
+          finish('alreadyAgreed');
         } else if (type === 'agreementRejected') {
           finish('rejected');
         } else {
@@ -111,10 +121,15 @@ export async function requestRainNotificationAgreement(
         }
       },
       onError: (error) => {
+        if (settled) return;
         const msg = errorMessage(error);
         console.warn(`[notify agreement] code=${templateCode}`, error);
         if (msg.includes('취소')) {
           finish('rejected');
+          return;
+        }
+        if (/already|이미\s*동의/i.test(msg)) {
+          finish('alreadyAgreed');
           return;
         }
         if (index + 1 < templateCodes.length) {
@@ -125,7 +140,7 @@ export async function requestRainNotificationAgreement(
         }
         finish(
           'error',
-          `${msg || '알림 동의에 실패하였습니다.'} (코드: ${tried.join(' → ')})\n\n${consoleChecklist(deploymentId)}`,
+          `${msg || '알림 동의에 실패하였습니다.'} (코드: ${tried.join(' → ')})\n\n${consoleChecklist(deploymentId, templateCode)}`,
         );
       },
     });

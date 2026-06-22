@@ -15,6 +15,8 @@ import {
   buildPushMsgCancel,
   buildPushMsgClear,
   buildPushMsgEndSoon,
+  formatDeliveryError,
+  parseSendDelivery,
   sendFunctionalMessage,
 } from '../toss/messenger.js';
 import {
@@ -24,6 +26,7 @@ import {
   planRemind,
   type RemindAction,
 } from './campaigns.js';
+import { isNotifyPushEnabled } from './pushGate.js';
 
 type NotifyKind = 'rain' | 'sudden' | 'clear' | 'end_soon' | 'cancel';
 
@@ -54,6 +57,7 @@ export interface NotifyScanResult {
   reminders: number;
   errors: number;
   durationMs: number;
+  paused?: boolean;
 }
 
 interface LocationScanDelta {
@@ -99,6 +103,7 @@ async function trySendPush(
   locName: string,
   kind: NotifyKind,
 ): Promise<boolean> {
+  if (!isNotifyPushEnabled()) return false;
   if (!isMtlsConfigured() || !isTossUserKey(userKey)) return false;
 
   const { status, data } = await sendFunctionalMessage({
@@ -107,12 +112,14 @@ async function trySendPush(
     context,
   });
 
-  if (data.resultType === 'SUCCESS') {
-    console.log(`[NOTIFY] ${kind} push sent user=${userKey} loc=${locName}`);
+  const delivery = parseSendDelivery(data);
+  if (delivery.delivered) {
+    console.log(`[NOTIFY] ${kind} push sent user=${userKey} loc=${locName} push=${delivery.sentPushCount}`);
     return true;
   }
 
-  console.warn(`[NOTIFY] ${kind} push failed user=${userKey} status=${status}`, data.error);
+  const hint = formatDeliveryError(delivery) ?? data.error?.reason ?? 'unknown';
+  console.warn(`[NOTIFY] ${kind} push not delivered user=${userKey} status=${status}`, hint);
   return false;
 }
 
@@ -358,6 +365,24 @@ async function scanLocation(
 
 export async function runNotifyScan(): Promise<NotifyScanResult> {
   const started = Date.now();
+  if (!isNotifyPushEnabled()) {
+    return {
+      users: 0,
+      locations: 0,
+      triggered: 0,
+      pushed: 0,
+      sudden: 0,
+      endSoon: 0,
+      cleared: 0,
+      cancelled: 0,
+      skippedCooldown: 0,
+      reminders: 0,
+      errors: 0,
+      durationMs: Date.now() - started,
+      paused: true,
+    };
+  }
+
   const rainTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE?.trim();
   const clearTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE_CLEAR?.trim();
   const endSoonTemplate = process.env.TOSS_PUSH_TEMPLATE_CODE_END_SOON?.trim();

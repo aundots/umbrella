@@ -32,6 +32,17 @@ function relayCacheKey(lat: number, lng: number): string {
 export async function buildApp() {
   const app = Fastify({ logger: true });
   await app.register(cors, { origin: true });
+
+  // QStash 등 외부 스케줄러가 보내는 임의/빈 Content-Type POST가 415로 막히지 않도록
+  // 미지정 콘텐츠 타입은 본문 없이 통과 (application/json 등 구체 파서가 우선 적용됨)
+  app.addContentTypeParser('*', (_req, payload, done) => {
+    let data = '';
+    payload.on('data', (chunk) => {
+      data += chunk;
+    });
+    payload.on('end', () => done(null, data || undefined));
+    payload.on('error', done);
+  });
   registerLegalRoutes(app);
   registerGeocodeRoutes(app);
   registerTossRoutes(app);

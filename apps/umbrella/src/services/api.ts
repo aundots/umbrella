@@ -137,8 +137,12 @@ export async function saveLocation(
 export async function sendTestPush(
   userKey: string,
   kind: 'rain' | 'clear' | 'end_soon' | 'cancel' = 'rain',
-): Promise<{ resultType?: string; error?: { reason?: string } }> {
+): Promise<{ delivered: boolean; sentPushCount?: number }> {
   const base = getApiBaseUrl();
+  const cfg = await fetchNotifyConfig().catch(() => null);
+  if (cfg?.pushEnabled === false) {
+    throw new Error('서버 알림 발송이 일시 중단된 상태예요. 잠시 후 다시 시도해 주세요.');
+  }
   const contextByKind =
     kind === 'clear'
       ? { msg: '지금 집에' }
@@ -156,11 +160,25 @@ export async function sendTestPush(
       context: contextByKind,
     }),
   });
-  const json = (await res.json()) as { resultType?: string; error?: { reason?: string }; message?: string };
+  const json = (await res.json()) as {
+    resultType?: string;
+    error?: { reason?: string };
+    message?: string;
+    success?: { sentPushCount?: number; sentInboxCount?: number };
+  };
   if (!res.ok) {
-    throw new Error(json.error?.reason ?? json.message ?? `HTTP ${res.status}`);
+    const reason = json.error?.reason ?? json.message ?? `HTTP ${res.status}`;
+    throw new Error(reason);
   }
-  return json;
+  const delivered =
+    (json.success?.sentPushCount ?? 0) > 0 || (json.success?.sentInboxCount ?? 0) > 0;
+  if (!delivered) {
+    throw new Error(
+      json.error?.reason ??
+        '푸시가 도달하지 않았어요. 설정에서 강수 알림을 끄고 다시 켜서 토스 동의를 완료해 주세요.',
+    );
+  }
+  return { delivered: true, sentPushCount: json.success?.sentPushCount };
 }
 
 export async function registerUser(userKey: string, notifyConsent: boolean): Promise<void> {
@@ -173,9 +191,16 @@ export async function registerUser(userKey: string, notifyConsent: boolean): Pro
 }
 
 export interface NotifyConfig {
-  agreementTemplateCode: string;
+  agreementTemplateCode: string | null;
   pushTemplateCode: string | null;
   deploymentId: string | null;
+  agreementConfigured?: boolean;
+  pushEnabled?: boolean;
+  templates?: {
+    rain: string | null;
+    clear: string | null;
+    endSoon: string | null;
+  };
 }
 
 export async function fetchNotifyConfig(): Promise<NotifyConfig> {

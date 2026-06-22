@@ -1,10 +1,7 @@
 name: Rain notify cron
 
 on:
-  schedule:
-    # every 2.5 minutes (offset :00 and :02)
-    - cron: '0,5,10,15,20,25,30,35,40,45,50,55 * * * *'
-    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
+  # QStash가 주 스케줄러 — GitHub cron은 수동 실행만 (토스 발송 중단 시 자동 호출 방지)
   workflow_dispatch:
 
 jobs:
