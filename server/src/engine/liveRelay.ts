@@ -13,13 +13,13 @@ import {
   blendPrecipEnd,
   deriveArrivalFromTimeline,
   fcstSlotWet,
+  HSR_CONFIRM_THRESHOLD,
   HSR_PRECIP_THRESHOLD,
   loadNowcastContext,
   mergeTimelineWithNowcast,
   nowcastConfidenceBoost,
   resolveDataSource,
   timelinePrecipitatingNow,
-  vilageSlotIsWet,
 } from './nowcastBlend.js';
 import {
   applyTerrainAdjust,
@@ -182,22 +182,38 @@ export async function buildLiveRelayReport(
         undefined as ForecastDetail | undefined,
       ).catch(() => undefined);
 
-  let currentType = ncstPrecipType(ncst);
-  let currentRate = rn1ToRateMmH(ncstRn1(ncst));
+  // Official ultra-short-term observation (초단기실황) is the ground truth for
+  // whether it is raining right now.
+  const obsType = ncstPrecipType(ncst);
+  const obsRate = rn1ToRateMmH(ncstRn1(ncst));
+  const obsPrecip = isPrecipitating(obsType) || obsRate >= 0.1;
+
+  let currentType = obsType;
+  let currentRate = obsRate;
   if (nowcast.hsrRateMmH != null) {
     const hsr = nowcast.hsrRateMmH;
-    if (isPrecipitating(currentType) || hsr >= HSR_PRECIP_THRESHOLD) {
+    // Radar may confirm/intensify precip the observation already sees, but it must
+    // clear a stronger bar before overriding a dry observation — otherwise light
+    // non-meteorological echoes surface as false "raining now".
+    const hsrConfirmsNow = obsPrecip
+      ? hsr >= HSR_PRECIP_THRESHOLD
+      : hsr >= HSR_CONFIRM_THRESHOLD;
+    if (hsrConfirmsNow) {
       currentRate = Math.max(currentRate, hsr);
-      if (hsr >= HSR_PRECIP_THRESHOLD) currentType = 'rain';
+      if (!isPrecipitating(currentType)) currentType = 'rain';
     }
   }
 
   const vilageNow = vilageNowSlot(vilageSlots, now);
-  if (vilageNow && vilageSlotIsWet(vilageNow)) {
-    const ncstDry =
-      !isPrecipitating(ncstPrecipType(ncst)) && ncstRn1(ncst) < 0.1;
-    const hsrDry = nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < HSR_PRECIP_THRESHOLD;
-    // Vilage is hourly forecast — do not override dry ultra ncst / HSR observations.
+  // Vilage is an hourly forecast whose "wet" flag includes POP probability; only its
+  // actual precip categories (PTY / measurable PCP) may speak to current conditions.
+  const vilageNowPrecip =
+    vilageNow != null && (vilageNow.pty !== 'none' || vilageNow.pcpMm >= 0.1);
+  if (vilageNow && vilageNowPrecip) {
+    const ncstDry = !obsPrecip;
+    const hsrDry =
+      nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < HSR_CONFIRM_THRESHOLD;
+    // Never let an hourly forecast override a fresh, dry observation + radar.
     if (!(ncstDry && hsrDry)) {
       if (vilageNow.pty !== 'none') currentType = vilageNow.pty;
       else currentType = 'rain';
