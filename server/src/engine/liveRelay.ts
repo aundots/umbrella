@@ -127,9 +127,13 @@ function buildTimeline(now: Date, fcst: FcstSlot[]): LiveRelayReport['timeline']
   const offsets = [0, 10, 20, 30, 40, 50, 60];
   return offsets.map((offsetMin) => {
     const target = new Date(now.getTime() + offsetMin * 60000);
+    const nearestSlot = fcst.find(
+      (s) => Math.abs(s.at.getTime() - target.getTime()) < 8 * 60000,
+    );
     const slot =
-      fcst.find((s) => Math.abs(s.at.getTime() - target.getTime()) < 8 * 60000) ??
-      fcst.find((s) => s.at >= target);
+      offsetMin === 0
+        ? nearestSlot
+        : nearestSlot ?? fcst.find((s) => s.at >= target);
     if (!slot) return { offsetMin, rateMmH: 0, type: 'none' as PrecipType };
     return { offsetMin, rateMmH: rn1ToRateMmH(slot.rn1), type: slot.pty };
   });
