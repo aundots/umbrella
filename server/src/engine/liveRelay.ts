@@ -13,13 +13,12 @@ import {
   blendPrecipEnd,
   deriveArrivalFromTimeline,
   fcstSlotWet,
+  HSR_CONFIRM_THRESHOLD,
   HSR_PRECIP_THRESHOLD,
   loadNowcastContext,
   mergeTimelineWithNowcast,
   nowcastConfidenceBoost,
   resolveDataSource,
-  timelinePrecipitatingNow,
-  vilageSlotIsWet,
 } from './nowcastBlend.js';
 import {
   applyTerrainAdjust,
@@ -127,9 +126,13 @@ function buildTimeline(now: Date, fcst: FcstSlot[]): LiveRelayReport['timeline']
   const offsets = [0, 10, 20, 30, 40, 50, 60];
   return offsets.map((offsetMin) => {
     const target = new Date(now.getTime() + offsetMin * 60000);
+    const nearestSlot = fcst.find(
+      (s) => Math.abs(s.at.getTime() - target.getTime()) < 8 * 60000,
+    );
     const slot =
-      fcst.find((s) => Math.abs(s.at.getTime() - target.getTime()) < 8 * 60000) ??
-      fcst.find((s) => s.at >= target);
+      offsetMin === 0
+        ? nearestSlot
+        : nearestSlot ?? fcst.find((s) => s.at >= target);
     if (!slot) return { offsetMin, rateMmH: 0, type: 'none' as PrecipType };
     return { offsetMin, rateMmH: rn1ToRateMmH(slot.rn1), type: slot.pty };
   });
@@ -178,22 +181,38 @@ export async function buildLiveRelayReport(
         undefined as ForecastDetail | undefined,
       ).catch(() => undefined);
 
-  let currentType = ncstPrecipType(ncst);
-  let currentRate = rn1ToRateMmH(ncstRn1(ncst));
+  // Official ultra-short-term observation (초단기실황) is the ground truth for
+  // whether it is raining right now.
+  const obsType = ncstPrecipType(ncst);
+  const obsRate = rn1ToRateMmH(ncstRn1(ncst));
+  const obsPrecip = isPrecipitating(obsType) || obsRate >= 0.1;
+
+  let currentType = obsType;
+  let currentRate = obsRate;
   if (nowcast.hsrRateMmH != null) {
     const hsr = nowcast.hsrRateMmH;
-    if (isPrecipitating(currentType) || hsr >= HSR_PRECIP_THRESHOLD) {
+    // Radar may confirm/intensify precip the observation already sees, but it must
+    // clear a stronger bar before overriding a dry observation — otherwise light
+    // non-meteorological echoes surface as false "raining now".
+    const hsrConfirmsNow = obsPrecip
+      ? hsr >= HSR_PRECIP_THRESHOLD
+      : hsr >= HSR_CONFIRM_THRESHOLD;
+    if (hsrConfirmsNow) {
       currentRate = Math.max(currentRate, hsr);
-      if (hsr >= HSR_PRECIP_THRESHOLD) currentType = 'rain';
+      if (!isPrecipitating(currentType)) currentType = 'rain';
     }
   }
 
   const vilageNow = vilageNowSlot(vilageSlots, now);
-  if (vilageNow && vilageSlotIsWet(vilageNow)) {
-    const ncstDry =
-      !isPrecipitating(ncstPrecipType(ncst)) && ncstRn1(ncst) < 0.1;
-    const hsrDry = nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < HSR_PRECIP_THRESHOLD;
-    // Vilage is hourly forecast — do not override dry ultra ncst / HSR observations.
+  // Vilage is an hourly forecast whose "wet" flag includes POP probability; only its
+  // actual precip categories (PTY / measurable PCP) may speak to current conditions.
+  const vilageNowPrecip =
+    vilageNow != null && (vilageNow.pty !== 'none' || vilageNow.pcpMm >= 0.1);
+  if (vilageNow && vilageNowPrecip) {
+    const ncstDry = !obsPrecip;
+    const hsrDry =
+      nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < HSR_CONFIRM_THRESHOLD;
+    // Never let an hourly forecast override a fresh, dry observation + radar.
     if (!(ncstDry && hsrDry)) {
       if (vilageNow.pty !== 'none') currentType = vilageNow.pty;
       else currentType = 'rain';
@@ -229,20 +248,24 @@ export async function buildLiveRelayReport(
     willArrive,
   });
 
-  if (timelinePrecipitatingNow(timeline)) {
-    const nowSlot = timeline.find((s) => s.offsetMin === 0)!;
-    if (!isPrecipitating(currentType)) {
-      currentType = nowSlot.type !== 'none' ? nowSlot.type : 'rain';
-    }
-    currentRate = Math.max(currentRate, nowSlot.rateMmH);
-    willArrive = false;
-    inMinutes = null;
-    arrivalType = null;
-  }
+  // "Raining now" stays anchored to the live observation + radar, which are already
+  // folded into currentType/currentRate above. A forecast-driven timeline slot (ultra
+  // short-term / vilage) must NOT flip the current status — a wet forecast slot for
+  // this hour means rain is imminent and is surfaced through arrival below, not as
+  // "raining now". This is what kept showing rain on clear skies.
   const precipNowFinal =
-    isPrecipitating(currentType) ||
-    currentRate >= HSR_PRECIP_THRESHOLD ||
-    timelinePrecipitatingNow(timeline);
+    isPrecipitating(currentType) || currentRate >= HSR_PRECIP_THRESHOLD;
+
+  // Keep the timeline's "now" sample in sync with the observation-anchored status so
+  // the 0–60 min graph and the arrival derivation never read a phantom current rain.
+  const nowIdx = timeline.findIndex((s) => s.offsetMin === 0);
+  if (nowIdx >= 0) {
+    timeline[nowIdx] = {
+      offsetMin: 0,
+      rateMmH: precipNowFinal ? Math.round(currentRate * 10) / 10 : 0,
+      type: precipNowFinal ? currentType : 'none',
+    };
+  }
 
   const timelineArrival = deriveArrivalFromTimeline(timeline, precipNowFinal);
   if (timelineArrival.willArrive) {

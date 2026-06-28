@@ -9,8 +9,14 @@ const TIMELINE_NOISE_FLOOR = 0.25;
 const POP_END_THRESHOLD = 30;
 
 const NOWCAST_BUDGET_MS = 18_000;
-/** HSR mm/h at or above this → treat as precipitating (500 m radar) */
+/** HSR mm/h at or above this → radar shows precip echo (used to confirm/intensify) */
 export const HSR_PRECIP_THRESHOLD = 0.15;
+/**
+ * HSR mm/h required to declare "raining now" when the official observation is dry.
+ * Light radar returns (ground clutter, bright band, virga) sit below this, so we
+ * demand a stronger echo before overriding a dry ultra-short-term observation.
+ */
+export const HSR_CONFIRM_THRESHOLD = 0.5;
 
 export interface NowcastContext {
   hsrAvailable: boolean;
@@ -83,7 +89,9 @@ export function mergeTimelineWithNowcast(
 
     if (slot.offsetMin === 0 && ctx.hsrRateMmH != null) {
       const hsr = ctx.hsrRateMmH;
-      if (precipNow || fcstWet || hsr >= HSR_PRECIP_THRESHOLD) {
+      // At "now", a standalone radar echo must clear the confirm threshold; below it
+      // we only fold radar in when precip is already established/forecast.
+      if (precipNow || fcstWet || hsr >= HSR_CONFIRM_THRESHOLD) {
         rate = Math.max(rate, hsr);
       }
     }
