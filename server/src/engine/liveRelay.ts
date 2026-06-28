@@ -19,7 +19,6 @@ import {
   mergeTimelineWithNowcast,
   nowcastConfidenceBoost,
   resolveDataSource,
-  timelinePrecipitatingNow,
 } from './nowcastBlend.js';
 import {
   applyTerrainAdjust,
@@ -249,20 +248,24 @@ export async function buildLiveRelayReport(
     willArrive,
   });
 
-  if (timelinePrecipitatingNow(timeline)) {
-    const nowSlot = timeline.find((s) => s.offsetMin === 0)!;
-    if (!isPrecipitating(currentType)) {
-      currentType = nowSlot.type !== 'none' ? nowSlot.type : 'rain';
-    }
-    currentRate = Math.max(currentRate, nowSlot.rateMmH);
-    willArrive = false;
-    inMinutes = null;
-    arrivalType = null;
-  }
+  // "Raining now" stays anchored to the live observation + radar, which are already
+  // folded into currentType/currentRate above. A forecast-driven timeline slot (ultra
+  // short-term / vilage) must NOT flip the current status — a wet forecast slot for
+  // this hour means rain is imminent and is surfaced through arrival below, not as
+  // "raining now". This is what kept showing rain on clear skies.
   const precipNowFinal =
-    isPrecipitating(currentType) ||
-    currentRate >= HSR_PRECIP_THRESHOLD ||
-    timelinePrecipitatingNow(timeline);
+    isPrecipitating(currentType) || currentRate >= HSR_PRECIP_THRESHOLD;
+
+  // Keep the timeline's "now" sample in sync with the observation-anchored status so
+  // the 0–60 min graph and the arrival derivation never read a phantom current rain.
+  const nowIdx = timeline.findIndex((s) => s.offsetMin === 0);
+  if (nowIdx >= 0) {
+    timeline[nowIdx] = {
+      offsetMin: 0,
+      rateMmH: precipNowFinal ? Math.round(currentRate * 10) / 10 : 0,
+      type: precipNowFinal ? currentType : 'none',
+    };
+  }
 
   const timelineArrival = deriveArrivalFromTimeline(timeline, precipNowFinal);
   if (timelineArrival.willArrive) {
