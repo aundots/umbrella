@@ -5,7 +5,7 @@ import { fetchHsrRainGrid, rainRateAt } from '../kma/wthrRadar.js';
 
 const RATE_END_THRESHOLD = 0.05;
 /** MAPLE/HSR below this (mm/h) must not override ultra PTY=none on the timeline */
-const TIMELINE_NOISE_FLOOR = 0.25;
+export const TIMELINE_NOISE_FLOOR = 0.25;
 const POP_END_THRESHOLD = 30;
 
 const NOWCAST_BUDGET_MS = 18_000;

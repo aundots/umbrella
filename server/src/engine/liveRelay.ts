@@ -4,6 +4,7 @@ import {
   ncstPrecipType,
   ncstRn1,
 } from '../kma/client.js';
+import { skyLabel } from '../kma/labels.js';
 import { buildForecastDetail } from '../kma/forecastDetail.js';
 import { fetchVilageFcst } from '../kma/vilageFcst.js';
 import { FcstSlot, ForecastDetail, PrecipType, VilageHourly } from '../kma/types.js';
@@ -19,6 +20,12 @@ import {
   mergeTimelineWithNowcast,
   nowcastConfidenceBoost,
   resolveDataSource,
+<<<<<<< HEAD
+=======
+  TIMELINE_NOISE_FLOOR,
+  timelinePrecipitatingNow,
+  vilageSlotIsWet,
+>>>>>>> 8dd8a7f (변경 내용)
 } from './nowcastBlend.js';
 import {
   applyTerrainAdjust,
@@ -34,6 +41,8 @@ export interface LiveRelayReport {
     precipitating: boolean;
     type: PrecipType;
     rateMmH: number;
+    /** Current sky (맑음/구름많음/흐림) from KMA observation when not precipitating. */
+    sky?: string;
   };
   arrival: {
     willArrive: boolean;
@@ -58,6 +67,15 @@ export interface LiveRelayReport {
   terrain: ReturnType<typeof computeTerrainContext> | null;
   timeline: Array<{ offsetMin: number; rateMmH: number; type: PrecipType }>;
   detail?: ForecastDetail;
+  /** 알림용 다중 소스 관측 스냅샷 (종료 알림 건조 확인) */
+  observation: {
+    ncstPrecipitating: boolean;
+    ncstRn1: number;
+    hsrRateMmH: number | null;
+    mapleRateMmH: number | null;
+    vilagePrecipitating: boolean;
+    ultraFcstWet: boolean;
+  };
 }
 
 function isPrecipitating(type: PrecipType): boolean {
@@ -76,6 +94,30 @@ function intensityLabel(rate: number): string {
 
 function minutesUntil(from: Date, to: Date): number {
   return Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
+}
+
+function resolveNowSky(
+  ncst: Map<string, string>,
+  vilageNow: VilageHourly | null,
+  fcst: FcstSlot[],
+  now: Date,
+): string | undefined {
+  const pty = ncst.get('PTY');
+  if (pty === '0' || pty == null) {
+    const label = skyLabel(ncst.get('SKY'));
+    if (label !== '—') return label;
+  }
+  if (vilageNow?.sky) {
+    const label = skyLabel(vilageNow.sky);
+    if (label !== '—') return label;
+  }
+  const nearSlot =
+    fcst.find((s) => Math.abs(s.at.getTime() - now.getTime()) < 8 * 60000) ?? fcst[0];
+  if (nearSlot?.sky) {
+    const label = skyLabel(nearSlot.sky);
+    if (label !== '—') return label;
+  }
+  return undefined;
 }
 
 function vilageNowSlot(vilage: VilageHourly[], now: Date): VilageHourly | null {
@@ -203,7 +245,21 @@ export async function buildLiveRelayReport(
     }
   }
 
+  const mapleNowRate =
+    nowcast.mapleSlots.find((s) => s.offsetMin === 0)?.rateMmH ??
+    nowcast.mapleSlots.find((s) => s.offsetMin <= 10)?.rateMmH ??
+    null;
+  if (
+    mapleNowRate != null &&
+    mapleNowRate >= TIMELINE_NOISE_FLOOR &&
+    !isPrecipitating(currentType)
+  ) {
+    currentType = 'rain';
+    currentRate = Math.max(currentRate, mapleNowRate);
+  }
+
   const vilageNow = vilageNowSlot(vilageSlots, now);
+<<<<<<< HEAD
   // Vilage is an hourly forecast whose "wet" flag includes POP probability; only its
   // actual precip categories (PTY / measurable PCP) may speak to current conditions.
   const vilageNowPrecip =
@@ -214,6 +270,16 @@ export async function buildLiveRelayReport(
       nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < HSR_CONFIRM_THRESHOLD;
     // Never let an hourly forecast override a fresh, dry observation + radar.
     if (!(ncstDry && hsrDry)) {
+=======
+  if (vilageNow && vilageSlotIsWet(vilageNow)) {
+    const ncstDry =
+      !isPrecipitating(ncstPrecipType(ncst)) && ncstRn1(ncst) < 0.1;
+    const hsrDry = nowcast.hsrRateMmH == null || nowcast.hsrRateMmH < HSR_PRECIP_THRESHOLD;
+    const vilageObserved =
+      vilageNow.pty !== 'none' || vilageNow.pcpMm >= 0.1;
+    // 실측 강수(PTY/누적)는 ncst·HSR이 잠깐 말라도 유지. POP만 높은 시간대는 초단기가 말랐을 때만 반영.
+    if (vilageObserved || !(ncstDry && hsrDry)) {
+>>>>>>> 8dd8a7f (변경 내용)
       if (vilageNow.pty !== 'none') currentType = vilageNow.pty;
       else currentType = 'rain';
       currentRate = Math.max(currentRate, vilageNow.pcpMm);
@@ -327,6 +393,10 @@ export async function buildLiveRelayReport(
 
   const arrivalWillArrive = precipNowFinal ? false : adjusted.willArrive;
   const arrivalInMinutes = precipNowFinal ? null : adjusted.inMinutes;
+  const nowSky = precipNowFinal ? undefined : resolveNowSky(ncst, vilageNow, fcst, now);
+
+  const nearFcst =
+    fcst.find((s) => Math.abs(s.at.getTime() - now.getTime()) < 8 * 60000) ?? fcst[0];
 
   return {
     locationId: params.locationId,
@@ -336,6 +406,7 @@ export async function buildLiveRelayReport(
       precipitating: precipNowFinal,
       type: currentType,
       rateMmH: Math.round(currentRate * 10) / 10,
+      ...(nowSky ? { sky: nowSky } : {}),
     },
     arrival: {
       willArrive: arrivalWillArrive,
@@ -359,6 +430,16 @@ export async function buildLiveRelayReport(
     terrain,
     timeline,
     detail,
+    observation: {
+      ncstPrecipitating: isPrecipitating(ncstPrecipType(ncst)),
+      ncstRn1: ncstRn1(ncst),
+      hsrRateMmH: nowcast.hsrRateMmH,
+      mapleRateMmH: mapleNowRate,
+      vilagePrecipitating: Boolean(
+        vilageNow && (vilageNow.pty !== 'none' || vilageNow.pcpMm >= 0.1),
+      ),
+      ultraFcstWet: nearFcst ? fcstSlotWet(nearFcst) : false,
+    },
   };
 }
 

@@ -46,7 +46,7 @@ export async function buildForecastDetail(
   const nowObs = {
     tempC: numOrUndef(ncst.get('T1H')),
     humidity: numOrUndef(ncst.get('REH')),
-    sky: ncst.get('PTY') === '0' ? skyLabel(ncst.get('SKY')) : undefined,
+    sky: resolveNowObsSky(ncst, fcst),
     lightning: ncst.get('LGT') === '1' || Number(ncst.get('LGT')) > 0,
   };
 
@@ -66,6 +66,20 @@ export async function buildForecastDetail(
     vilageHourly,
     vilageAvailable,
   };
+}
+
+function resolveNowObsSky(ncst: Map<string, string>, fcst: FcstSlot[]): string | undefined {
+  const pty = ncst.get('PTY');
+  if (pty === '0' || pty == null) {
+    const label = skyLabel(ncst.get('SKY'));
+    if (label !== '—') return label;
+  }
+  const slot = fcst[0];
+  if (slot?.sky) {
+    const label = skyLabel(slot.sky);
+    if (label !== '—') return label;
+  }
+  return undefined;
 }
 
 function numOrUndef(val: string | undefined): number | undefined {

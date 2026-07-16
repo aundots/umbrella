@@ -7,7 +7,16 @@ import {
   saveRelayPhases,
   type NotifyCampaignStore,
   type RelayPhase,
+  type RelayPhaseEntry,
 } from '../db/persistence.js';
+import {
+  advancePhaseEntry,
+  canSendClearNotify,
+  canSendRainNotify,
+  markClearNotify,
+  markRainNotify,
+  normalizePhaseEntry,
+} from './phaseStability.js';
 import { buildLiveRelayReport } from '../engine/liveRelay.js';
 import { isMtlsConfigured } from '../toss/mtls.js';
 import {
@@ -26,16 +35,17 @@ import {
   planRemind,
   type RemindAction,
 } from './campaigns.js';
+import { isDryForClearNotify } from './dryGate.js';
 import { isNotifyPushEnabled } from './pushGate.js';
 
 type NotifyKind = 'rain' | 'sudden' | 'clear' | 'end_soon' | 'cancel';
 
 const COOLDOWN_BY_KIND: Record<NotifyKind, number> = {
   rain: 30 * 60_000,
-  sudden: 15 * 60_000,
-  clear: 30 * 60_000,
+  sudden: 45 * 60_000,
+  clear: 45 * 60_000,
   end_soon: 30 * 60_000,
-  cancel: 30 * 60_000,
+  cancel: 45 * 60_000,
 };
 
 /** @deprecated rain/end_soon use ack + 10min remind campaigns instead */
@@ -134,6 +144,7 @@ async function tickRemindCampaign(
   logLabel: string,
   notifyKind: NotifyKind,
   delta: LocationScanDelta,
+  phaseEntry?: RelayPhaseEntry,
 ): Promise<boolean> {
   let dirty = false;
 
@@ -159,12 +170,19 @@ async function tickRemindCampaign(
       (action === 'remind' ? ' remind' : ''),
   );
 
+  if (kind === 'approaching' && phaseEntry && !canSendRainNotify(phaseEntry)) {
+    return dirty;
+  }
+
   if (
     await trySendPush(userKey, template, buildContext(), loc.name, notifyKind)
   ) {
     markCampaignSent(campaign);
     delta.pushed += 1;
     if (kind === 'end_soon') delta.endSoon += 1;
+    if (kind === 'approaching' && phaseEntry && canSendRainNotify(phaseEntry)) {
+      markRainNotify(phaseEntry);
+    }
     dirty = true;
   }
 
@@ -178,7 +196,7 @@ async function scanLocation(
   clearTemplate: string | undefined,
   endSoonTemplate: string | undefined,
   cancelTemplate: string | undefined,
-  relayPhases: Record<string, RelayPhase>,
+  relayPhases: Record<string, RelayPhase | RelayPhaseEntry>,
   campaigns: NotifyCampaignStore,
 ): Promise<LocationScanDelta> {
   const delta: LocationScanDelta = {
@@ -209,17 +227,26 @@ async function scanLocation(
     );
 
     const stateKey = `${userKey}:${loc.id}`;
-    const prevStatus = relayPhases[stateKey];
-    const currStatus = report.relayStatus as RelayPhase;
-    if (prevStatus !== currStatus) {
-      relayPhases[stateKey] = currStatus;
+    const phase = advancePhaseEntry(relayPhases[stateKey], report.relayStatus as RelayPhase);
+    if (phase.dirty) {
+      relayPhases[stateKey] = phase.entry;
       delta.relayDirty = true;
     }
 
+    const prevStatus = phase.prevConfirmed;
+    const currStatus = phase.confirmed;
+    const statusChanged = phase.transitioned;
+
     let rainHandled = false;
 
-    // 1) 갑작스러운 비: clear → live (짧은 쿨다운, 우선 발송)
-    if (prevStatus === 'clear' && currStatus === 'live' && rainTemplate) {
+    // 1) 갑작스러운 비: clear → live (확정 전이 + 상호 쿨다운)
+    if (
+      statusChanged &&
+      prevStatus === 'clear' &&
+      currStatus === 'live' &&
+      rainTemplate &&
+      canSendRainNotify(phase.entry)
+    ) {
       const eventKey = `${stateKey}:sudden`;
       if (withinCooldown('sudden', eventKey)) {
         delta.skippedCooldown += 1;
@@ -241,13 +268,15 @@ async function scanLocation(
           delta.sudden += 1;
           delta.pushed += 1;
           rainHandled = true;
+          markRainNotify(phase.entry);
+          delta.relayDirty = true;
           if (clearCampaign(campaigns, userKey, loc.id, 'approaching')) campaignsDirty = true;
         }
       }
     }
 
-    // 2) 예보 취소: approaching → clear
-    if (prevStatus === 'approaching' && currStatus === 'clear' && cancelTemplate) {
+    // 2) 예보 취소: approaching → clear (확정 전이)
+    if (statusChanged && prevStatus === 'approaching' && currStatus === 'clear' && cancelTemplate) {
       if (clearCampaign(campaigns, userKey, loc.id, 'approaching')) campaignsDirty = true;
 
       const eventKey = `${stateKey}:cancel`;
@@ -271,8 +300,15 @@ async function scanLocation(
       }
     }
 
-    // 3) 비 그침: live → clear
-    if (prevStatus === 'live' && currStatus === 'clear' && clearTemplate) {
+    // 3) 비 그침: live → clear (확정 전이 + 다중 소스 건조 확인 + 상호 쿨다운)
+    if (
+      statusChanged &&
+      prevStatus === 'live' &&
+      currStatus === 'clear' &&
+      clearTemplate &&
+      canSendClearNotify(phase.entry) &&
+      isDryForClearNotify(report)
+    ) {
       if (clearCampaign(campaigns, userKey, loc.id, 'end_soon')) campaignsDirty = true;
 
       const eventKey = `${stateKey}:clear`;
@@ -292,13 +328,17 @@ async function scanLocation(
           )
         ) {
           delta.cleared += 1;
+          delta.pushed += 1;
+          markClearNotify(phase.entry);
+          delta.relayDirty = true;
         }
       }
     }
 
-    // 4) 곧 그침 — 확인 전 10분마다 재발송
+    // 4) 곧 그침 — 확인 전 10분마다 재발송 (확정 live 일 때만)
     const remainingMin = report.end.remainingMinutes;
     const shouldNotifyEndSoon =
+      currStatus === 'live' &&
       report.end.soon &&
       report.now.precipitating &&
       remainingMin != null &&
@@ -326,8 +366,9 @@ async function scanLocation(
       if (clearCampaign(campaigns, userKey, loc.id, 'end_soon')) campaignsDirty = true;
     }
 
-    // 5) 강수 예고 — 비 시작 전까지, 확인 전 10분마다 재발송
+    // 5) 강수 예고 — 확정 approaching 일 때만, 확인 전 10분마다 재발송
     const shouldNotifyApproaching =
+      currStatus === 'approaching' &&
       !rainHandled &&
       !report.now.precipitating &&
       report.arrival.willArrive &&
@@ -346,12 +387,13 @@ async function scanLocation(
         `approaching in=${report.arrival.inMinutes ?? '?'}min peak=${report.arrival.peakRateMmH}mm/h`,
         'rain',
         delta,
+        phase.entry,
       )
     ) {
       campaignsDirty = true;
     }
 
-    if (report.now.precipitating || currStatus === 'live') {
+    if (currStatus === 'live' || report.now.precipitating) {
       if (clearCampaign(campaigns, userKey, loc.id, 'approaching')) campaignsDirty = true;
     }
   } catch (e) {

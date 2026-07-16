@@ -5,6 +5,15 @@ import { fileURLToPath } from 'url';
 
 export type RelayPhase = 'live' | 'approaching' | 'clear';
 
+/** 알림용 확정 상태 + 안정화 메타 (레이더/초단기 노이즈 완화) */
+export interface RelayPhaseEntry {
+  confirmed: RelayPhase;
+  pending?: RelayPhase;
+  pendingSince?: number;
+  lastRainNotifyAt?: number;
+  lastClearNotifyAt?: number;
+}
+
 export type NotifyCampaignKind = 'approaching' | 'end_soon';
 
 /** Active alert thread — repeat every 10 min until user acks or weather event ends. */
@@ -53,7 +62,7 @@ const LOCAL_RELAY_PATH = join(__dir, '../../data/relay.json');
 
 let redisClient: Redis | null | undefined;
 let memoryDb: DbData = { users: [], locations: [] };
-let memoryRelay: Record<string, RelayPhase> = {};
+let memoryRelay: Record<string, RelayPhase | RelayPhaseEntry> = {};
 let memoryCampaigns: NotifyCampaignStore = {};
 
 function emptyDb(): DbData {
@@ -137,10 +146,10 @@ export async function saveDb(data: DbData): Promise<void> {
   writeJsonFile(LOCAL_DATA_PATH, data);
 }
 
-export async function loadRelayPhases(): Promise<Record<string, RelayPhase>> {
+export async function loadRelayPhases(): Promise<Record<string, RelayPhase | RelayPhaseEntry>> {
   const redis = getRedis();
   if (redis) {
-    const data = await redis.get<Record<string, RelayPhase>>(RELAY_KEY);
+    const data = await redis.get<Record<string, RelayPhase | RelayPhaseEntry>>(RELAY_KEY);
     memoryRelay = data ?? {};
     return memoryRelay;
   }
@@ -149,7 +158,9 @@ export async function loadRelayPhases(): Promise<Record<string, RelayPhase>> {
   return memoryRelay;
 }
 
-export async function saveRelayPhases(phases: Record<string, RelayPhase>): Promise<void> {
+export async function saveRelayPhases(
+  phases: Record<string, RelayPhase | RelayPhaseEntry>,
+): Promise<void> {
   memoryRelay = phases;
   const redis = getRedis();
   if (redis) {

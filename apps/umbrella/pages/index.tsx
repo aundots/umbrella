@@ -25,7 +25,7 @@ import {
   dataSourceLabel,
   formatTime,
   precipLabel,
-  statusLabel,
+  nowHeadline,
 } from '../src/services/api';
 
 function HomeScreen() {
@@ -138,17 +138,17 @@ function HomeScreen() {
               <>
                 <RelayCard title="지금" accent={statusColor}>
                   <Txt typography="t3" fontWeight="bold" color={COLORS.text}>
-                    {statusLabel(report.relayStatus)}
+                    {nowHeadline(report)}
                   </Txt>
                   {report.now.precipitating ? (
                     <Txt typography="t5" color={COLORS.text} style={styles.value}>
                       {precipLabel(report.now.type)} · 시간당 {report.now.rateMmH} mm
                     </Txt>
-                  ) : (
+                  ) : report.now.sky || report.detail?.nowObs?.sky ? (
                     <Txt typography="t5" color={COLORS.text} style={styles.value}>
                       강수 없음
                     </Txt>
-                  )}
+                  ) : null}
                   <MetaLine
                     text={`${formatTime(report.observedAt)} 관측 · ${report.spatial.resolutionM}m · ${dataSourceLabel(report.spatial.dataSource)}`}
                   />

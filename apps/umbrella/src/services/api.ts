@@ -12,6 +12,7 @@ export interface LiveRelayReport {
     precipitating: boolean;
     type: 'none' | 'rain' | 'snow' | 'mixed';
     rateMmH: number;
+    sky?: string;
   };
   arrival: {
     willArrive: boolean;
@@ -340,6 +341,21 @@ export function dataSourceLabel(source: LiveRelayReport['spatial']['dataSource']
   }
 }
 
+/** Main headline for the current relay card (uses sky observation, not relay phase alone). */
+export function nowHeadline(report: LiveRelayReport): string {
+  if (report.relayStatus === 'live' || report.now.precipitating) {
+    const kind = precipLabel(report.now.type);
+    return kind === '없음' ? '비 내리는 중' : `${kind} 내리는 중`;
+  }
+  if (report.relayStatus === 'approaching') {
+    return report.arrival.willArrive ? '강수 접근 중' : '구름 접근 중';
+  }
+  const sky = report.now.sky ?? report.detail?.nowObs?.sky;
+  if (sky && sky !== '—') return sky;
+  return '강수 없음';
+}
+
+/** @deprecated Prefer nowHeadline(report) — clear phase is not always sunny. */
 export function statusLabel(status: LiveRelayReport['relayStatus']): string {
   switch (status) {
     case 'live':
@@ -347,7 +363,7 @@ export function statusLabel(status: LiveRelayReport['relayStatus']): string {
     case 'approaching':
       return '구름 접근 중';
     default:
-      return '맑음';
+      return '강수 없음';
   }
 }
 
