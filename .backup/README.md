@@ -35,7 +35,7 @@ The script downloads the pinned encrypted archive from the private Google Drive,
 
 ## On a new Windows computer
 
-1. Install Python 3.11 or later from https://www.python.org/ and Git for Windows. Authenticate GitHub (for example `gh auth login` and `gh auth setup-git`) so background pushes can use saved credentials without a prompt.
+1. Install Python 3.11 or later from https://www.python.org/ and Git for Windows. Setup automatically installs GitHub CLI through WinGet when missing, verifies the `aundots` account, and configures Git HTTPS authentication. Complete browser login once if requested. WinGet (Microsoft App Installer) must be available; Windows may request administrator approval during installation.
 2. Clone the project's `backup/local-2026-09-24/snapshot` branch.
 3. Copy your separately saved `RECOVERY-KEY-KEEP-PRIVATE.json` from offline storage or a password manager. Never paste its contents into chat.
 4. Run `powershell -NoProfile -File .backup/setup.ps1 -KeyFile C:\private\RECOVERY-KEY-KEEP-PRIVATE.json`.
@@ -66,3 +66,5 @@ Automatic snapshots cover saved local source, signing keys, certificates, settin
 Local health is recorded in `status.json` and `last-run.log` under the runtime directory. A failed or partial run is visible in Task Scheduler's last result. Pending encrypted uploads stay under `queue`; do not delete that directory while uploads are pending. To pause automatic backup, disable this user's `ProjectSecretBackup-...` task in Task Scheduler. Other PCs keep their own schedules.
 
 Backup encryption uses AES-256-GCM with a fresh 96-bit nonce per archive and the project name as authenticated context. The encrypted ZIP contains the file manifest and per-file SHA-256 hashes. Restore rejects corrupt data, the wrong project/key, unsafe paths and symlinks/junctions; it never overwrites existing files.
+
+GitHub-only setup: run `powershell -NoProfile -File .backup/setup-github.ps1`. Existing installations and valid logins are reused. Official installation reference: https://github.com/cli/cli/blob/trunk/docs/install_windows.md

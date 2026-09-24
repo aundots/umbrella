@@ -1,5 +1,6 @@
 param([string]$KeyFile, [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference='Stop'
+& (Join-Path $PSScriptRoot 'setup-github.ps1')
 $statePath=if($env:PROJECT_SECRET_BACKUP_HOME){$env:PROJECT_SECRET_BACKUP_HOME}else{Join-Path $env:USERPROFILE 'Documents\Codex\SecretBackup'}
 New-Item -ItemType Directory -Path $statePath -Force | Out-Null
 $taskUser=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name
