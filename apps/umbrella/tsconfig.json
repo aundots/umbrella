@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["pages/**/*", "src/**/*", "index.ts", "granite.config.ts", "brand.config.ts", "require.context.ts", "granite-env.d.ts", "src/auth/**/*"]
+}
