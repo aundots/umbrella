@@ -35,7 +35,7 @@ The script downloads the pinned encrypted archive from the private Google Drive,
 
 ## On a new Windows computer
 
-1. Install Python 3.11 or later from https://www.python.org/ and Git for Windows. Authenticate GitHub (for example `gh auth login` and `gh auth setup-git`) so background pushes can use saved credentials without a prompt.
+1. Install Python 3.11 or later from https://www.python.org/ and Git for Windows. Setup automatically installs GitHub CLI through WinGet when missing, verifies the `aundots` account, and configures Git HTTPS authentication. Complete browser login once if requested. WinGet (Microsoft App Installer) must be available; Windows may request administrator approval during installation.
 2. Clone the project's `backup/local-2026-09-24/snapshot` branch.
 3. Copy your separately saved `RECOVERY-KEY-KEEP-PRIVATE.json` from offline storage or a password manager. Never paste its contents into chat.
 4. Run `powershell -NoProfile -File .backup/setup.ps1 -KeyFile C:\private\RECOVERY-KEY-KEEP-PRIVATE.json`.
@@ -66,3 +66,21 @@ Automatic snapshots cover saved local source, signing keys, certificates, settin
 Local health is recorded in `status.json` and `last-run.log` under the runtime directory. A failed or partial run is visible in Task Scheduler's last result. Pending encrypted uploads stay under `queue`; do not delete that directory while uploads are pending. To pause automatic backup, disable this user's `ProjectSecretBackup-...` task in Task Scheduler. Other PCs keep their own schedules.
 
 Backup encryption uses AES-256-GCM with a fresh 96-bit nonce per archive and the project name as authenticated context. The encrypted ZIP contains the file manifest and per-file SHA-256 hashes. Restore rejects corrupt data, the wrong project/key, unsafe paths and symlinks/junctions; it never overwrites existing files.
+
+GitHub-only setup: run `powershell -NoProfile -File .backup/setup-github.ps1`. Existing installations and valid logins are reused. Official installation reference: https://github.com/cli/cli/blob/trunk/docs/install_windows.md
+
+## Complete project recovery after deleting a local folder
+
+Use the standalone toolkit (auto-backup-kit.zip), kept outside the project you delete:
+
+```powershell
+powershell -NoProfile -File recover-project.ps1 -Project parking -Destination C:\Projects\parking -KeyFile C:\private\RECOVERY-KEY-KEEP-PRIVATE.json
+```
+
+On a new PC this first runs setup, installing GitHub CLI if missing and requesting GitHub/Google login. Git for Windows and Python remain prerequisites. On a configured PC the key argument can be omitted. The destination must be new or empty. Recovery downloads the authenticated snapshot, fetches its exact code commit from GitHub, and restores the original Git HEAD, branches, tags, stash entries, staged and unstaged saved work. It reconnects origin and registers the recovered folder for automatic backup. `-NoRegister` leaves registration unchanged for a recovery test. Install project dependencies separately.
+
+Git bundles are encrypted separately under automatic-history and reused by content on each PC. Never delete these objects: older snapshots may reference them. Changed Git history creates a new encrypted object. Bundles include commits reachable from refs, HEAD and reflogs; unreachable objects not in any of those are not promised. Old reflog commits are preserved as refs/recovery/reflog/*; exact reflog messages/timestamps and custom Git hooks are not recreated. Merge conflicts and submodules require explicit handling and block full-history capture. Source files above 200 MB, Git bundles above 512 MB or total captures above 1 GB fail explicitly.
+
+Before deleting a source folder, finish a successful backup and restore test and stop editing it. Then run `powershell -NoProfile -File unregister-project.ps1 -Project parking` from the standalone toolkit. This only removes that PC's schedule registration; it does not delete any source or cloud data. Do not run it early if continuing local work. Keep the toolkit, recovery key and local SecretBackup runtime outside deleted folders. The shared-keys registration can remain active.
+
+Private files and Git history still require Google Drive and the separate recovery key; GitHub alone only recovers the scanned code snapshot. Dependencies/build artifacts, ignored generated content, live server databases and unsaved editor buffers are outside this backup. Tracked files are preserved even when their extension normally denotes a build artifact. Backup is not automatic conflict resolution between PCs.

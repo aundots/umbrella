@@ -50,7 +50,7 @@ def rclone(args):
     password = STATE/'config-password.dpapi'
     if password.exists():
         env['RCLONE_CONFIG_PASS'] = dpapi(password.read_bytes(), True).decode()
-    result = subprocess.run([command, '--config', str(STATE/'rclone.conf'), '--contimeout', '20s', '--timeout', '60s', *args], capture_output=True, env=env, timeout=240)
+    result = subprocess.run([command, '--config', str(STATE/'rclone.conf'), '--contimeout', '20s', '--timeout', '60s', '--tpslimit', '2', '--tpslimit-burst', '1', *args], capture_output=True, env=env, timeout=1800 if args and args[0]=='copyto' else 240)
     if result.returncode:
         # Never include captured output: it can contain credential material.
         raise RuntimeError('Google Drive access failed. Reconnect the configured account using setup.ps1.')
