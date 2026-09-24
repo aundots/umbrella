@@ -2,7 +2,7 @@
 import argparse, contextlib, datetime as dt, hashlib, hmac, io, json, os, pathlib
 import re, shutil, sqlite3, subprocess, sys, tempfile, time, uuid, zipfile
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-import restore
+import restore,git_history
 
 STATE=restore.STATE
 REMOTE='project-secrets:Codex-Private-Backups/automatic'
@@ -75,7 +75,7 @@ def private_path(rel):
 
 def candidates(root):
     for directory,dirs,names in os.walk(root):
-        dirs[:]=sorted(d for d in dirs if d not in SKIP and not (pathlib.Path(directory)/d).is_symlink() and not (hasattr(pathlib.Path(directory)/d,'is_junction') and (pathlib.Path(directory)/d).is_junction()))
+        dirs[:]=sorted(d for d in dirs if d not in SKIP and d!='.backup-history' and not (pathlib.Path(directory)/d).is_symlink() and not (hasattr(pathlib.Path(directory)/d,'is_junction') and (pathlib.Path(directory)/d).is_junction()))
         for name in sorted(names):
             path=pathlib.Path(directory)/name;rel=path.relative_to(root).as_posix()
             if '/.vercel/output/' in '/'+rel:continue
@@ -94,7 +94,14 @@ def capture(root,project):
         head=git(root,'rev-parse','HEAD').stdout.decode().strip()
         allowed=set(git(root,'ls-files','--cached','--others','--exclude-standard','-z').stdout.decode().strip('\0').split('\0'))
     data={};items=[];stats=[];total=0
-    for path,rel in candidates(root):
+    paths=dict((rel,path) for path,rel in candidates(root))
+    # Tracked files (including wrapper JARs/build fixtures) are always preserved.
+    if head:
+        for rel in git(root,'ls-files','--cached','-z').stdout.decode().strip('\0').split('\0'):
+            if rel and not rel.startswith(git_history.PREFIX):
+                path=restore.safe_path(root,rel)
+                if path.is_file():paths[rel]=path
+    for rel,path in sorted(paths.items()):
         restore.safe_path(root,rel)
         before=path.stat();raw=path.read_bytes();after=path.stat()
         if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise RuntimeError('Files changed during capture; retry next run')
@@ -112,13 +119,23 @@ def capture(root,project):
                 # serialized image rollback-journal mode, as required by deserialize.
                 image=bytearray(dst.serialize());image[18]=image[19]=1;raw=bytes(image)
         data[rel]=raw
-        items.append({'path':rel,'size':len(raw),'sha256':digest(raw),'sqlite':is_db,'private':rel not in allowed or private_path(rel)})
+        items.append({'path':rel,'size':len(raw),'sha256':digest(raw),'sqlite':is_db,'private':is_db or rel not in allowed or private_path(rel)})
         if not is_db:stats.append((path,after.st_size,after.st_mtime_ns))
     for path,size,mtime in stats:
         st=path.stat()
         if (size,mtime)!=(st.st_size,st.st_mtime_ns):raise RuntimeError('Files changed during capture; retry next run')
     if not items:raise RuntimeError('Refusing an empty project snapshot')
     if head and git(root,'rev-parse','HEAD').stdout.decode().strip()!=head:raise RuntimeError('Git HEAD changed during capture')
+    if head:
+        for rel,raw in git_history.capture(sys.modules[__name__],root).items():
+            if rel in data:raise RuntimeError('Reserved recovery metadata path')
+            total+=len(raw)
+            if len(raw)>512_000_000 or total>1_000_000_000:raise RuntimeError('Git history requires large-file configuration')
+            data[rel]=raw;items.append({'path':rel,'size':len(raw),'sha256':digest(raw),'sqlite':False,'private':True})
+    for path,size,mtime in stats:
+        st=path.stat()
+        if (size,mtime)!=(st.st_size,st.st_mtime_ns):raise RuntimeError('Files changed during history capture')
+    if head and git(root,'rev-parse','HEAD').stdout.decode().strip()!=head:raise RuntimeError('HEAD changed during history capture')
     fingerprint=digest(canonical({'head':head,'files':[{k:x[k] for k in ('path','sha256','private')} for x in items]}))
     return data,items,head,fingerprint
 
@@ -157,13 +174,55 @@ def code_commit(project,data,items,device_id):
         git(None,'--git-dir='+str(bare),'update-ref',ref,sha)
         return sha,'ready'
 
+def history_blob(project,raw,key):
+    """Reuse one encrypted Git bundle per content hash on this PC."""
+    folder=STATE/'history-blobs'/project;folder.mkdir(parents=True,exist_ok=True)
+    index=folder/(digest(raw)+'.json')
+    record=read_json(index,{})
+    if record:
+        local=folder/(record['sha256']+'.psb')
+        if local.exists() and digest(local.read_bytes())==record['sha256']:return record
+    item={'path':git_history.PREFIX+'repository.bundle','size':len(raw),'sha256':digest(raw),'private':True,'sqlite':False}
+    manifest={'format':1,'project':project,'files':[item]}
+    buffer=io.BytesIO()
+    with zipfile.ZipFile(buffer,'w',compression=zipfile.ZIP_STORED) as z:
+        z.writestr('files/'+item['path'],raw);z.writestr('manifest.json',json.dumps(manifest))
+    nonce=os.urandom(12);encrypted=restore.MAGIC+nonce+AESGCM(key).encrypt(nonce,buffer.getvalue(),restore.MAGIC+project.encode())
+    sha=digest(encrypted);(folder/(sha+'.psb')).write_bytes(encrypted)
+    record={'project':project,'sha256':sha,'remote_path':REMOTE+'-history/'+project+'/'+sha+'.psb','encrypted_bytes':len(encrypted)}
+    write_json(index,record);return record
+
+def publish_history(project,record):
+    if record.get('project')!=project or record['remote_path']!=REMOTE+'-history/'+project+'/'+record['sha256']+'.psb':raise RuntimeError('Invalid history blob')
+    folder=STATE/'history-blobs'/project;archive=folder/(record['sha256']+'.psb')
+    raw=archive.read_bytes()
+    if digest(raw)!=record['sha256']:raise RuntimeError('History blob checksum mismatch')
+    done=archive.with_suffix('.uploaded')
+    if not done.exists():restore.rclone(['copyto',str(archive),record['remote_path'],'--immutable','--retries','1'])
+    check=restore.rclone(['md5sum',record['remote_path']]).decode().split()
+    if not check or check[0].lower()!=hashlib.md5(raw).hexdigest():raise RuntimeError('Remote history checksum mismatch')
+    done.write_text('verified',encoding='ascii')
+
+def restore_snapshot(record,destination):
+    result=restore.restore(record,destination)
+    if record.get('history_blob'):
+        blob=record['history_blob'];project=record['project']
+        if blob.get('project')!=project or blob['remote_path']!=REMOTE+'-history/'+project+'/'+blob['sha256']+'.psb':raise RuntimeError('Invalid history blob')
+        restored=restore.restore(blob,destination)
+        result['restored_files']+=restored['restored_files']
+    return result
+
 def enqueue(project,root,key,device_id,previous):
     data,items,head,fingerprint=capture(root,project)
     if previous.get('fingerprint')==fingerprint:return previous,False
     try:code_sha,code_state=code_commit(project,data,items,device_id)
     except Exception:code_sha,code_state=None,'code-capture-failed'
     created=now();name=dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'-'+fingerprint[:12]
-    manifest={'format':1,'project':project,'created':created,'device':device_id,'source_head':head,'fingerprint':fingerprint,'code_sha':code_sha,'files':items}
+    blob=None;bundle_path=git_history.PREFIX+'repository.bundle'
+    if bundle_path in data:
+        blob=history_blob(project,data.pop(bundle_path),key)
+        items=[x for x in items if x['path']!=bundle_path]
+    manifest={'format':1,'project':project,'created':created,'device':device_id,'source_head':head,'fingerprint':fingerprint,'code_sha':code_sha,'history_blob':blob,'files':items}
     buffer=io.BytesIO()
     with zipfile.ZipFile(buffer,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for item in items:z.writestr('files/'+item['path'],data[item['path']])
@@ -173,6 +232,7 @@ def enqueue(project,root,key,device_id,previous):
     queue=STATE/'queue'/project;queue.mkdir(parents=True,exist_ok=True)
     archive=queue/(name+'.psb');archive.write_bytes(raw)
     record={'format':2,'project':project,'created':created,'device':device_id,'fingerprint':fingerprint,'sha256':digest(raw),'encrypted_bytes':len(raw),'file_count':len(items),'code_sha':code_sha,'code_state':code_state,'code_branch':'backup/auto/'+device_id,'remote_path':REMOTE+'/'+project+'/'+device_id+'/'+name+'.psb'}
+    if blob:record['history_blob']=blob
     write_json(queue/(name+'.json'),record)
     return {'fingerprint':fingerprint,'captured':created,'code_sha':code_sha,'code_state':code_state},True
 
@@ -194,6 +254,7 @@ def flush(project,key,github_state):
     if not queue.exists():return 0
     for file in sorted(queue.glob('*.json')):
         record=read_json(file,{})
+        if record.get('history_blob'):publish_history(project,record['history_blob'])
         archive=file.with_suffix('.psb');raw=archive.read_bytes()
         if digest(raw)!=record['sha256']:raise RuntimeError('Local queued archive changed')
         restore.rclone(['copyto',str(archive),record['remote_path'],'--immutable','--retries','1'])
@@ -270,20 +331,33 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     sub=p.add_subparsers(dest='command',required=True)
     r=sub.add_parser('register');r.add_argument('--project',required=True,choices=sorted(PROJECTS));r.add_argument('--root',required=True)
+    r=sub.add_parser('unregister');r.add_argument('--project',required=True,choices=sorted(PROJECTS))
     r=sub.add_parser('run');r.add_argument('--project',choices=sorted(PROJECTS))
     sub.add_parser('status')
     r=sub.add_parser('latest');r.add_argument('--project',required=True,choices=sorted(PROJECTS))
     r=sub.add_parser('restore-latest');r.add_argument('--project',required=True,choices=sorted(PROJECTS));r.add_argument('--destination',required=True)
+    r=sub.add_parser('recover-project');r.add_argument('--project',required=True,choices=sorted(PROJECTS-{'shared-keys'}));r.add_argument('--destination',required=True)
     args=p.parse_args()
     if args.command=='status':print(json.dumps(read_json(STATE/'status.json',{})));return 0
     if args.command=='latest':print(json.dumps(latest(args.project)));return 0
     with locked():
         if args.command=='register':register(args.project,args.root);print('Project registered on this computer.');return 0
+        if args.command=='unregister':
+            projects=read_json(STATE/'projects.json',{})
+            projects.pop(args.project,None);write_json(STATE/'projects.json',projects)
+            print('Local backup registration removed; source and remote backups retained.');return 0
         if args.command=='run':return run(args.project)
         if args.command=='restore-latest':
             recipe=latest(args.project)
-            print(json.dumps(restore.restore(recipe,args.destination)))
+            print(json.dumps(restore_snapshot(recipe,args.destination)))
             return 0
+        if args.command=='recover-project':
+            root=pathlib.Path(args.destination).resolve()
+            if root.exists() and (not root.is_dir() or any(root.iterdir())):raise RuntimeError('Recovery requires a new or empty folder')
+            recipe=latest(args.project)
+            result=restore_snapshot(recipe,root)
+            result.update(git_history.restore_repository(sys.modules[__name__],args.project,root,recipe))
+            print(json.dumps(result));return 0
 
 if __name__=='__main__':
     try:raise SystemExit(main())

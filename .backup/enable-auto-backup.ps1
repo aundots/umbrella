@@ -5,7 +5,7 @@ $pythonExe=(Get-Content -LiteralPath (Join-Path $statePath 'python-path.txt') -R
 if(-not(Test-Path -LiteralPath $pythonExe)){throw 'Run setup.ps1 first.'}
 $toolkit=Join-Path $statePath 'toolkit'
 New-Item -ItemType Directory -Path $toolkit -Force | Out-Null
-foreach($name in @('restore.py','auto_backup.py','run-auto-backup.ps1')){
+foreach($name in @('restore.py','auto_backup.py','git_history.py','run-auto-backup.ps1')){
     $from=Join-Path $PSScriptRoot $name
     $to=Join-Path $toolkit $name
     if([IO.Path]::GetFullPath($from) -ne [IO.Path]::GetFullPath($to)){Copy-Item -LiteralPath $from -Destination $to -Force}
