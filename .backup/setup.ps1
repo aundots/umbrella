@@ -1,4 +1,4 @@
-param([string]$KeyFile)
+param([string]$KeyFile, [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference='Stop'
 $statePath=if($env:PROJECT_SECRET_BACKUP_HOME){$env:PROJECT_SECRET_BACKUP_HOME}else{Join-Path $env:USERPROFILE 'Documents\Codex\SecretBackup'}
 New-Item -ItemType Directory -Path $statePath -Force | Out-Null
@@ -18,3 +18,8 @@ $arguments=@((Join-Path $PSScriptRoot 'setup.py'))
 if($KeyFile){$arguments+=@('--key-file',$KeyFile)}
 & $venvPython @arguments
 if($LASTEXITCODE -ne 0){throw 'One-time setup did not complete.'}
+if(Test-Path -LiteralPath (Join-Path $ProjectRoot '.backup\recipe.json')){
+    & (Join-Path $PSScriptRoot 'enable-auto-backup.ps1') -ProjectRoot $ProjectRoot
+}else{
+    Write-Output 'Authentication is configured. Run enable-auto-backup.ps1 -ProjectRoot <project folder> for each project on this PC.'
+}

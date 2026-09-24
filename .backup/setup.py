@@ -28,6 +28,13 @@ def main():
             raise RuntimeError('rclone checksum mismatch')
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             exe.write_bytes(archive.read('rclone-v1.75.1-windows-amd64/rclone.exe'))
+    scanner=state/'gitleaks.exe'
+    if not scanner.exists():
+        data=urllib.request.urlopen('https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_windows_x64.zip').read()
+        if hashlib.sha256(data).hexdigest()!='d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e':
+            raise RuntimeError('Secret scanner checksum mismatch')
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            scanner.write_bytes(archive.read('gitleaks.exe'))
     config=state/'rclone.conf'
     env=os.environ.copy()
     env['RCLONE_CONFIG_PASS']=restore.dpapi(secret.read_bytes(),True).decode()
