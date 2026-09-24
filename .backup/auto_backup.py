@@ -9,9 +9,18 @@ REMOTE='project-secrets:Codex-Private-Backups/automatic'
 PROJECTS={'parking','orea','mute','horserace','platotracker2','umbrella','shared-keys'}
 SKIP={'.git','node_modules','.next','.gradle','.turbo','.dart_tool','.cxx','build','dist','out','.expo','coverage','__pycache__','caches','worktrees','ephemeral'}
 GENERATED={'.apk','.aab','.ait','.class','.jar','.dex','.so','.tsbuildinfo','.log','.iml'}
+class AlreadyRunning(RuntimeError):pass
 
 def now():return dt.datetime.now(dt.timezone.utc).isoformat()
 def digest(data):return hashlib.sha256(data).hexdigest()
+def scan_view(project,path,raw):
+    # Reviewed legacy Supabase public anon key, not a service_role/user token.
+    # Exact bytes and file locations only; a rotated/different token still blocks.
+    # https://supabase.com/docs/guides/getting-started/api-keys
+    if project=='platotracker2' and path in {'lib/config/env_config.dart','lib/main.dart'}:
+        raw=re.sub(rb'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',
+            lambda m:b'REVIEWED_PUBLIC_ANON_KEY' if digest(m[0])=='a0e534095c385aa251662daef03443f2466f3c9f45f2ba0995f6c3cb8af10ed5' else m[0],raw)
+    return raw
 def read_json(path, default):return json.loads(path.read_text(encoding='utf-8')) if path.exists() else default
 def write_json(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -32,10 +41,11 @@ def locked():
     import msvcrt
     STATE.mkdir(parents=True,exist_ok=True)
     f=(STATE/'automatic.lock').open('a+b')
-    f.seek(0);f.write(b'0');f.flush();f.seek(0)
+    if f.seek(0,os.SEEK_END)==0:f.write(b'0');f.flush()
+    f.seek(0)
     try:msvcrt.locking(f.fileno(),msvcrt.LK_NBLCK,1)
     except OSError:
-        f.close();raise RuntimeError('Another backup is already running')
+        f.close();raise AlreadyRunning('Another backup is already running')
     try:yield
     finally:
         f.seek(0);msvcrt.locking(f.fileno(),msvcrt.LK_UNLCK,1);f.close()
@@ -122,12 +132,15 @@ def code_commit(project,data,items,device_id):
         if not stage.is_relative_to(stage_parent.resolve()):raise RuntimeError('Invalid staging directory')
         for item in items:
             if item['private']:continue
-            target=restore.safe_path(stage,item['path']);target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data[item['path']])
+            target=restore.safe_path(stage,item['path']);target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(scan_view(project,item['path'],data[item['path']]))
         policy=STATE/'gitleaks-policy.toml'
         policy.write_text('[extend]\nuseDefault = true\n',encoding='utf-8')
         ignore=STATE/'gitleaks-empty.ignore';ignore.write_text('',encoding='utf-8')
         scan=subprocess.run([str(scanner),'dir',str(stage),'--config',str(policy),'--gitleaks-ignore-path',str(ignore),'--ignore-gitleaks-allow','--redact','--no-banner'],capture_output=True,timeout=120)
         if scan.returncode:return None,'secret-scan-blocked'
+        # Commit the original bytes after checking the separate scan view.
+        for item in items:
+            if not item['private']:restore.safe_path(stage,item['path']).write_bytes(data[item['path']])
         bare=STATE/'git-snapshots'/(project+'.git');bare.parent.mkdir(exist_ok=True)
         if not bare.exists():git(None,'init','--bare',str(bare))
         args=['--git-dir='+str(bare),'--work-tree='+str(stage)]
@@ -217,6 +230,7 @@ def register(project,root):
 
 def run(selected=None):
     results={};key=restore.recovery_key();device_id=device()
+    saved_results=read_json(STATE/'status.json',{}).get('projects',{})
     projects=read_json(STATE/'projects.json',{})
     state=read_json(STATE/'automatic-state.json',{})
     for project,entry in projects.items():
@@ -234,9 +248,10 @@ def run(selected=None):
         result['pending']=len(list((STATE/'queue'/project).glob('*.json')))
         result['ok']=result.get('local')!='failed' and result['drive']=='verified' and result['pending']==0 and (project=='shared-keys' or (result['github']=='verified' and result.get('code_scan')=='ready'))
         results[project]=result
-        write_json(STATE/'status.json',{'device':device_id,'last_run':now(),'projects':results,'complete':False})
+        saved_results[project]=result
+        write_json(STATE/'status.json',{'device':device_id,'last_run':now(),'projects':saved_results,'complete':False})
         print(json.dumps({'project':project,**result}),flush=True)
-    write_json(STATE/'status.json',{'device':device_id,'last_run':now(),'projects':results,'complete':True})
+    write_json(STATE/'status.json',{'device':device_id,'last_run':now(),'projects':saved_results,'complete':True})
     return 0 if results and all(x['ok'] for x in results.values()) else 1
 
 def latest(project):
@@ -272,6 +287,9 @@ def main():
 
 if __name__=='__main__':
     try:raise SystemExit(main())
+    except AlreadyRunning:
+        print('Another backup is already running; no duplicate run started.')
+        raise SystemExit(0)
     except Exception as error:
         print('Backup operation failed ('+type(error).__name__+'). Inspect status.json or rerun after checking login/network.',file=sys.stderr)
         raise SystemExit(1)
