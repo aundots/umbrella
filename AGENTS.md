@@ -1,8 +1,8 @@
 
 
-<!-- BEGIN private-backup-recovery -->
-## Multi-PC backup and recovery
-At the start of work, run `powershell -NoProfile -File .backup/auto-backup.ps1 -Action Latest` to inspect the newest authenticated snapshot. If another PC has newer work, compare its exact code commit before editing; do not overwrite local changes or automatically merge/switch branches. For full recovery into a new empty directory, run the standalone toolkit recover-project.ps1 -Project <project> -Destination <new folder>; this verifies the GitHub commit and restores private files, Git history and staged changes from authenticated Drive backups. If setup/authentication is unavailable, report it and continue only independent work; never invent secrets.
-At the end of work, run `powershell -NoProfile -File .backup/auto-backup.ps1 -Action Run` to back up saved changes. A Windows timer also runs every 15 minutes after this PC's one-time setup. Backups use separate per-PC GitHub branches and encrypted Drive versions; normal branches and the working index are unchanged.
-See `.backup/README.md` for setup on another Windows PC and recovery. Never print or commit secrets or the recovery key. Do not delete pending encrypted backups. Backup is not live bidirectional synchronization and excludes remote database contents and unsaved editor buffers.
-<!-- END private-backup-recovery -->
+<!-- BEGIN hybrid-workflow -->
+## Codespaces / Windows handoff (all project work)
+Use the `work/hybrid` branch for switching computers. Before editing, run `hybrid sync` in Codespaces, or `powershell -NoProfile -File .hybrid/hybrid.ps1 -Action sync` on configured Windows. This only fast-forwards clean code and preserves private-file conflicts. If newer automatic backup contains uncommitted work, recover to a NEW folder; never overwrite local work.
+After work, run `hybrid handoff` (Windows: `powershell -NoProfile -File .hybrid/hybrid.ps1 -Action handoff`). It scans code, pushes the shared branch, and verifies encrypted Drive backup. Do not stop/delete the workspace until HANDOFF VERIFIED is printed. Automatic snapshots run every 5 minutes while Codespaces is active and every 15 minutes on registered Windows computers.
+Never print credentials, commit private files, upload the offline recovery master key, force-push, or auto-resolve divergence. Do not restore old Windows-only `.backup` instructions on this branch. Read `.hybrid/README.md`. Use 2 cores, stop when finished, respect included-usage alerts and the zero-dollar Codespaces budget. AI subscriptions are separate.
+<!-- END hybrid-workflow -->

@@ -1,0 +1,5 @@
+---
+description: Preserve work when switching between Codespaces and Windows
+alwaysApply: true
+---
+Run the start/end handoff commands in AGENTS.md. Never commit private files or overwrite conflicting work.

@@ -40,3 +40,8 @@ apps/umbrella/.granite/
 /server/mtls/weather_public.crt
 /server/src/toss/mtls.ts
 # END private-backup-files
+
+# Hybrid runtime
+**/__pycache__/
+*.hybrid-restore-temp
+.backup-history/
