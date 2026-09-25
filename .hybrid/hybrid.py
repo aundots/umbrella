@@ -9,6 +9,7 @@ import restore, auto_backup as backup, git_history
 NATIVE = pathlib.Path(os.environ.get('PROJECT_SECRET_BACKUP_HOME', str(pathlib.Path.home()/'Documents/Codex/SecretBackup')))
 BRANCH = 'work/hybrid'
 original_key = restore.recovery_key
+original_private_path = backup.private_path
 
 def derive(master, project):
     return hmac.new(master, b'codespaces-hybrid-v1\0'+project.encode(), 'sha256').digest()
@@ -18,7 +19,7 @@ def configure(project):
         raise RuntimeError('Unknown project')
     if os.name == 'nt':
         state = NATIVE/'hybrid'/project
-        key = derive(original_key(), project)
+        key = derive(restore.dpapi((NATIVE/'recovery-key.dpapi').read_bytes(),True), project)
     else:
         state = pathlib.Path('/workspaces/.project-backup')/project
         key = base64.b64decode(os.environ['HYBRID_KEY_'+project.upper()], validate=True)
@@ -32,6 +33,7 @@ def configure(project):
     restore.rclone = rclone
     # Use only the authenticated user's repository and portable Git options.
     backup.git = git
+    backup.private_path = lambda rel: False if rel=='.cursor/rules/hybrid-backup.mdc' else original_private_path(rel)
     if os.name == 'nt':
         for name in ['gitleaks.exe']:
             if not (state/name).exists(): shutil.copy2(NATIVE/name, state/name)
@@ -112,6 +114,8 @@ def private_restore(project,root):
     for item in manifest['files']:
         if not item['private'] or item['path'].startswith(git_history.PREFIX):continue
         name=item['path'];target=restore.safe_path(root,name)
+        if item.get('sqlite') and any(pathlib.Path(str(target)+suffix).exists() for suffix in ['-wal','-shm']):
+            conflicts.append(name);continue
         if target.exists():
             current=backup.digest(target.read_bytes())
             if current==item['sha256']:
@@ -144,10 +148,14 @@ def sync(project,root):
     record,manifest=private_restore(project,root)
     # Never silently disregard newer uncommitted code in automatic snapshots.
     differing=0
+    expected=set()
     for item in manifest['files']:
         if item['private']:continue
+        expected.add(item['path'])
         target=restore.safe_path(root,item['path'])
         if not target.exists() or backup.digest(target.read_bytes())!=item['sha256']:differing+=1
+    tracked=set(git(root,'ls-files','-z').stdout.decode().strip('\0').split('\0'))
+    differing+=len({name for name in tracked if name and not backup.private_path(name)}-expected)
     if differing:
         raise RuntimeError('Automatic backup contains different code; recover it to a new folder before editing')
     print('Code and private files are ready.')
@@ -218,6 +226,7 @@ def main():
             record=backup.latest(project)
             result=backup.restore_snapshot(record,destination)
             result.update(git_history.restore_repository(backup,project,destination,record))
+            git(destination,'config','core.autocrlf','false')
             # GitHub supplies reviewed toolkit; reconstructed history is preserved.
             register(project,destination)
             print(json.dumps(result))
