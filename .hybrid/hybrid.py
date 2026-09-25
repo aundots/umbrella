@@ -33,6 +33,7 @@ def configure(project):
     restore.rclone = rclone
     # Use only the authenticated user's repository and portable Git options.
     backup.git = git
+    backup.latest = latest
     backup.private_path = lambda rel: False if rel=='.cursor/rules/hybrid-backup.mdc' else original_private_path(rel)
     if os.name == 'nt':
         for name in ['gitleaks.exe']:
@@ -54,10 +55,28 @@ def rclone(args):
         exe, conf = state/'rclone.exe', state/'rclone.conf'
         env['RCLONE_CONFIG_PASS'] = os.environ['HYBRID_DRIVE_PASSWORD']
     result = subprocess.run([str(exe), '--config', str(conf), '--contimeout', '20s', '--timeout', '60s',
-        '--tpslimit', '2', '--tpslimit-burst', '1', *args], env=env, capture_output=True,
-        timeout=1800 if args and args[0]=='copyto' else 300)
+        '--tpslimit', '1', '--tpslimit-burst', '1', '--low-level-retries','2','--retries','1', *args], env=env, capture_output=True,
+        timeout=600 if args and args[0]=='copyto' else 180)
     if result.returncode: raise RuntimeError('Drive operation failed; credential values withheld')
     return result.stdout
+
+def latest(project):
+    listing=json.loads(rclone(['lsjson',backup.REMOTE+'/'+project,'--recursive','--files-only','--include','*.json']))
+    if not listing:raise RuntimeError('No portable backup is available yet')
+    # Snapshot filenames begin with UTC capture time. Fetch only the newest signed
+    # record instead of issuing a separate Drive request for every old version.
+    import re,datetime
+    valid=[]
+    for entry in listing:
+        name=entry['Path']
+        if not re.fullmatch(r'[a-f0-9]{12}/[0-9]{8}T[0-9]{12}Z-[a-f0-9]{12}\.json',name):
+            raise RuntimeError('Unexpected backup index filename')
+        valid.append(name)
+    name=max(valid,key=lambda x:x.split('/')[1])
+    record=backup.validate(json.loads(rclone(['cat',backup.REMOTE+'/'+project+'/'+name])),restore.recovery_key(),project)
+    stamp=datetime.datetime.fromisoformat(record['created']).astimezone(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S')
+    if not name.split('/')[1].startswith(stamp):raise RuntimeError('Signed snapshot time disagrees with index filename')
+    return record
 
 def git(root, *args, env=None, check=True):
     child = os.environ.copy()
