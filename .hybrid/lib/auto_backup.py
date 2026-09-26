@@ -198,7 +198,8 @@ def publish_history(project,record):
     raw=archive.read_bytes()
     if digest(raw)!=record['sha256']:raise RuntimeError('History blob checksum mismatch')
     done=archive.with_suffix('.uploaded')
-    if not done.exists():restore.rclone(['copyto',str(archive),record['remote_path'],'--immutable','--retries','1'])
+    # A local marker cannot prove the archive exists after an OAuth backend change.
+    restore.rclone(['copyto',str(archive),record['remote_path'],'--immutable','--retries','1'])
     check=restore.rclone(['md5sum',record['remote_path']]).decode().split()
     if not check or check[0].lower()!=hashlib.md5(raw).hexdigest():raise RuntimeError('Remote history checksum mismatch')
     done.write_text('verified',encoding='ascii')
