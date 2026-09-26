@@ -49,7 +49,8 @@ def rclone(args):
     state = restore.STATE
     env = os.environ.copy()
     if os.name == 'nt':
-        exe, conf = NATIVE/'rclone.exe', NATIVE/'rclone.conf'
+        exe, conf = NATIVE/'rclone.exe', NATIVE/'personal-drive.conf'
+        if not conf.exists():raise RuntimeError('Personal Drive connection is not configured yet')
         env['RCLONE_CONFIG_PASS'] = restore.dpapi((NATIVE/'config-password.dpapi').read_bytes(), True).decode()
     else:
         exe, conf = state/'rclone.exe', state/'rclone.conf'
@@ -57,7 +58,10 @@ def rclone(args):
     result = subprocess.run([str(exe), '--config', str(conf), '--contimeout', '20s', '--timeout', '60s',
         '--tpslimit', '1', '--tpslimit-burst', '1', '--low-level-retries','2','--retries','1', *args], env=env, capture_output=True,
         timeout=600 if args and args[0]=='copyto' else 180)
-    if result.returncode: raise RuntimeError('Drive operation failed; credential values withheld')
+    if result.returncode:
+        error=result.stderr.decode(errors='replace').lower()
+        categories=[word for word in ['quota','ratelimit','invalid_grant','timeout','403','401','directory not found'] if word in error]
+        raise RuntimeError('Drive operation failed ('+','.join(categories or ['unclassified'])+'); credential values withheld')
     return result.stdout
 
 def latest(project):
@@ -74,8 +78,9 @@ def latest(project):
         valid.append(name)
     name=max(valid,key=lambda x:x.split('/')[1])
     record=backup.validate(json.loads(rclone(['cat',backup.REMOTE+'/'+project+'/'+name])),restore.recovery_key(),project)
-    stamp=datetime.datetime.fromisoformat(record['created']).astimezone(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S')
-    if not name.split('/')[1].startswith(stamp):raise RuntimeError('Signed snapshot time disagrees with index filename')
+    signed_time=datetime.datetime.fromisoformat(record['created']).astimezone(datetime.timezone.utc)
+    file_time=datetime.datetime.strptime(name.split('/')[1].split('-')[0],'%Y%m%dT%H%M%S%fZ').replace(tzinfo=datetime.timezone.utc)
+    if abs((signed_time-file_time).total_seconds())>5:raise RuntimeError('Signed snapshot time disagrees with index filename')
     return record
 
 def git(root, *args, env=None, check=True):
@@ -111,7 +116,8 @@ def register(project,root):
     if os.name=='nt':
         registry=NATIVE/'hybrid-projects.json'
         entries=backup.read_json(registry,{})
-        entries[project]={'root':str(root), 'tool':str(HERE/'hybrid.py')}
+        installed=NATIVE/'hybrid-toolkit/hybrid.py'
+        entries[project]={'root':str(root), 'tool':str(installed if installed.exists() else HERE/'hybrid.py')}
         backup.write_json(registry,entries)
 
 def snapshot(project,root):
@@ -206,11 +212,13 @@ def handoff(project,root):
         git(root,'update-ref','refs/heads/'+BRANCH,commit,old)
         git(root,'read-tree',commit)
     snapshot(project,root)
+    if git(root,'status','--porcelain').stdout.strip():
+        raise RuntimeError('New code edits remain after snapshot; rerun handoff before switching')
     print('HANDOFF VERIFIED: GitHub code and encrypted Drive files saved. You may stop this Codespace.')
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=['backup','handoff','sync','restore-private','recover','status','daemon','register'])
+    parser.add_argument('action',choices=['backup','handoff','finish','sync','restore-private','recover','status','daemon','register'])
     parser.add_argument('--project')
     parser.add_argument('--root',default=str(HERE.parent))
     parser.add_argument('--destination')
@@ -228,6 +236,7 @@ def main():
         while True:
             try:
                 with locked():snapshot(project,root)
+                backup.write_json(state/'daemon-status.json',{'ok':True,'time':backup.now()})
             except backup.AlreadyRunning:pass
             except Exception as error:
                 backup.write_json(state/'daemon-status.json',{'ok':False,'error_type':type(error).__name__,'time':backup.now()})
@@ -235,6 +244,12 @@ def main():
     with locked():
         if args.action=='backup':snapshot(project,root)
         elif args.action=='handoff':handoff(project,root)
+        elif args.action=='finish':
+            handoff(project,root)
+            name=os.environ.get('CODESPACE_NAME')
+            if not name:raise RuntimeError('finish is for Codespaces; use handoff on Windows')
+            result=subprocess.run(['gh','codespace','stop','-c',name],capture_output=True)
+            if result.returncode:raise RuntimeError('Backup verified, but stop failed; stop this Codespace from the GitHub menu')
         elif args.action=='sync':sync(project,root)
         elif args.action=='restore-private':private_restore(project,root)
         elif args.action=='register':register(project,root)

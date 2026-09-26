@@ -11,7 +11,7 @@ case "$project" in
   parking|horserace) npm ci ;;
   platotracker2)
     if ! command -v flutter >/dev/null; then
-      git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /workspaces/flutter-sdk
+      git clone --depth 1 --branch 3.29.3 https://github.com/flutter/flutter.git /workspaces/flutter-sdk
       export PATH="/workspaces/flutter-sdk/bin:$PATH"
       printf '\nexport PATH="/workspaces/flutter-sdk/bin:$PATH"\n' >> "$HOME/.bashrc"
     fi
