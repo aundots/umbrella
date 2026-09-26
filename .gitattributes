@@ -1,0 +1,3 @@
+
+.hybrid/*.sh text eol=lf
+.hybrid/*.py text eol=lf

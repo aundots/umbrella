@@ -1,0 +1,47 @@
+{
+  "name": "umbrella (2-core hybrid)",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "hostRequirements": {
+    "cpus": 2
+  },
+  "remoteUser": "codespace",
+  "postCreateCommand": "bash .hybrid/bootstrap.sh",
+  "postStartCommand": "bash .hybrid/start.sh",
+  "forwardPorts": [
+    3000,
+    5173,
+    8080
+  ],
+  "portsAttributes": {
+    "3000": {
+      "label": "Web app",
+      "onAutoForward": "notify"
+    },
+    "5173": {
+      "label": "Vite",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "files.autoSave": "afterDelay",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/codespace/.local/bin"
+  },
+  "secrets": {
+    "HYBRID_KEY_UMBRELLA": {
+      "description": "Project-specific backup key"
+    },
+    "HYBRID_DRIVE_CONFIG": {
+      "description": "Encrypted rclone configuration"
+    },
+    "HYBRID_DRIVE_PASSWORD": {
+      "description": "rclone configuration password"
+    }
+  }
+}
