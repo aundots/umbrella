@@ -1,0 +1,4 @@
+FROM mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server python3-venv python-is-python3 && rm -rf /var/lib/apt/lists/*
+USER node
