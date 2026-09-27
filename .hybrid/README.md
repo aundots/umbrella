@@ -1,3 +1,11 @@
+# Backup approval policy
+
+Automatic backup and sync are disabled. The original Codex task requests permission once daily at 10:00 Asia/Seoul. Silence is not approval. Ask before backup, sync, restore, or software updates.
+
+# Approval required
+
+No scheduled or background backups. The original Codex task asks once daily at 10:00 Asia/Seoul. Silence is not approval. Ask before sync, backup, handoff, restore, or software updates.
+
 # Codespaces and Windows
 
 Use `work/hybrid` for active work. Existing main branches and original desktop folders are retained.
@@ -14,7 +22,7 @@ powershell -NoProfile -File hybrid.ps1 -Action recover -Project parking -Destina
 
 From the recovered project use `.hybrid/hybrid.ps1 -Action sync` before work and `-Action handoff` afterward. Recovery registers its path in the existing Windows backup timer. On a new PC install the current combined toolkit's Windows runner once with `install-windows.ps1` after the existing restore-kit setup.
 
-Autosave in the editor saves files on the remote disk; it is not a GitHub push. Automatic encrypted snapshots and scanned GitHub code snapshots run every 5 minutes while a Codespace is running. Windows uses the existing 15-minute scheduled task. Timers cannot execute on stopped/sleeping machines. Handoff explicitly pushes the shared branch and verifies Drive before switching. No live cross-machine merge is performed.
+Automatic execution is disabled. Ask for explicit permission before every backup or update.
 
 Account settings: Codespaces $0 paid budget with Stop usage, included-usage alerts enabled, default idle timeout 10 minutes. GitHub Free's 120 core-hours are 60 active hours on a 2-core machine, shared across all projects. Storage is metered even while stopped. Do not delete a workspace with pending backups. Quota renews on the account's monthly billing cycle. No prebuilds are enabled. Use one active Codespace at a time.
 

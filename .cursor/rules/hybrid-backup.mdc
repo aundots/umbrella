@@ -2,4 +2,4 @@
 description: Preserve work when switching between Codespaces and Windows
 alwaysApply: true
 ---
-Run the start/end handoff commands in AGENTS.md. Never commit private files or overwrite conflicting work.
+Ask explicit user permission before the start/end handoff commands in AGENTS.md. No unattended updates or backup. Never commit private files or overwrite conflicting work.

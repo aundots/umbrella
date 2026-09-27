@@ -228,19 +228,8 @@ def main():
     if args.action=='status':
         print(json.dumps(backup.read_json(state/'status.json',{})));return
     if args.action=='daemon':
-        if os.name=='nt':raise RuntimeError('Windows uses the existing scheduled task')
-        import fcntl
-        daemon=(state/'daemon.lock').open('w')
-        try:fcntl.flock(daemon,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except OSError:return
-        while True:
-            try:
-                with locked():snapshot(project,root)
-                backup.write_json(state/'daemon-status.json',{'ok':True,'time':backup.now()})
-            except backup.AlreadyRunning:pass
-            except Exception as error:
-                backup.write_json(state/'daemon-status.json',{'ok':False,'error_type':type(error).__name__,'time':backup.now()})
-            time.sleep(300)
+        raise RuntimeError('Automatic backup disabled: explicit user approval is required for each run')
+
     with locked():
         if args.action=='backup':snapshot(project,root)
         elif args.action=='handoff':handoff(project,root)
