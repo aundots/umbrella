@@ -5,7 +5,7 @@
     "cpus": 2
   },
   "remoteUser": "codespace",
-  "postCreateCommand": "bash .hybrid/bootstrap.sh",
+  "postCreateCommand": "echo 'Ask permission, then run bash .hybrid/bootstrap.sh to install tools and restore private files.'",
   "postStartCommand": "bash .hybrid/start.sh",
   "forwardPorts": [
     3000,
