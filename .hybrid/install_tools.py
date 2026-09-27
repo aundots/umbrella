@@ -15,7 +15,7 @@ def main():
         path=state/target
         if path.exists():continue
         entries=download(base+checksums).decode().splitlines()
-        expected=next(line.split()[0] for line in entries if line.split()[-1].lstrip('*')==name)
+        expected=next(parts[0] for line in entries if len(parts:=line.split())>=2 and parts[-1].lstrip('*')==name)
         raw=download(base+name)
         if hashlib.sha256(raw).hexdigest()!=expected:raise RuntimeError('Official release checksum mismatch')
         if name.endswith('.zip'):
